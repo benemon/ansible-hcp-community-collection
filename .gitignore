@@ -3,3 +3,4 @@ integration_config.yml
 *.tar.gz
 *.out
 inventory
+.DS_Store
