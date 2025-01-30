@@ -1,0 +1,5 @@
+__pycache__
+integration_config.yml
+*.tar.gz
+*.out
+inventory

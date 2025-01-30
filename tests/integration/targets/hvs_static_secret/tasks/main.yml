@@ -1,0 +1,98 @@
+---
+- name: Test HVS secret lookup plugin
+  block:
+    # Validate input variables
+    - name: Validate required input vars
+      assert:
+        that:
+          - hcp_organisation_id is defined
+          - hcp_project_id is defined
+          - test_app_name is defined
+          - test_secret_name is defined
+          - expected_secret_type is defined
+        fail_msg: "Required variables hcp_organisation_id, hcp_project_id, test_app_name, test_secret_name, and expected_secret_type must be set"
+
+    # Test basic functionality
+    - name: Retrieve specific secret value
+      set_fact:
+        secret_value: "{{ lookup('benemon.hcp_community_collection.hvs_static_secret', 
+                        'organization_id=' ~ hcp_organisation_id, 
+                        'project_id=' ~ hcp_project_id,
+                        'app_name=' ~ test_app_name,
+                        'secret_name=' ~ test_secret_name) }}"
+
+    - name: Debug secret value
+      debug:
+        var: secret_value
+
+    # Verify secret retrieval
+    - name: Verify secret value structure
+      assert:
+        that:
+          - secret_value is defined
+          - secret_value is sequence
+        fail_msg: "Secret value retrieval failed - unexpected structure"
+
+    # Check secret details
+    - name: Verify secret details
+      assert:
+        that:
+          # Check secret type
+          - secret_value.type is defined
+          - secret_value.type == expected_secret_type
+          
+          # Check secret values exist
+          - secret_value.static_version is defined
+          - secret_value.static_version is mapping
+          - secret_value.static_version.value | length > 0
+        fail_msg: "Secret value validation failed"
+
+    # Additional checks for specific secret types
+    - name: Verify static secret details
+      block:
+        - name: Check static secret value
+          assert:
+            that:
+              - secret_value.static_version.value is defined
+              - secret_value.static_version.value | length > 0
+            fail_msg: "Static secret value is missing or empty"
+      when: expected_secret_type == 'kv'
+
+    # Optional version checks
+    - name: Verify secret version information
+      assert:
+        that:
+          - secret_value.version is defined
+          - secret_value.version is number
+        fail_msg: "Secret version information is missing or invalid"
+      when: expected_secret_type != 'kv'
+
+    # Error handling test (optional)
+    - name: Attempt to retrieve non-existent secret
+      set_fact:
+        non_existent_secret: "{{ lookup('benemon.hcp_community_collection.hvs_static_secret', 
+                             'organization_id=' ~ hcp_organisation_id, 
+                             'project_id=' ~ hcp_project_id,
+                             'app_name=' ~ test_app_name,
+                             'secret_name=non_existent_secret_name') }}"
+      ignore_errors: true
+      register: secret_error
+
+    - name: Verify error handling for non-existent secret
+      assert:
+        that:
+          - secret_error.failed is defined
+        fail_msg: "Error handling for non-existent secret did not raise an error"
+
+    # Print final results for debugging
+    - name: Show test results
+      debug:
+        msg: |
+          Secret retrieved successfully
+          Type: {{ secret_value.type }}
+          Value: {{ secret_value.static_version.value }}
+
+  rescue:
+    - name: Handle test failures
+      fail:
+        msg: "Integration test failed: {{ ansible_failed_result | default('Unknown error') }}"

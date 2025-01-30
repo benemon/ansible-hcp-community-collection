@@ -1,0 +1,142 @@
+---
+- name: Test HVS secrets lookup plugin
+  block:
+    # Validate input variables
+    - name: Validate required input vars
+      assert:
+        that:
+          - hcp_organisation_id is defined
+          - hcp_project_id is defined
+          - test_app_name is defined
+        fail_msg: "Required variables hcp_organisation_id, hcp_project_id, and test_app_name must be set"
+
+    # Test basic functionality
+    - name: List all secrets in app
+      set_fact:
+        all_secrets: "{{ lookup('benemon.hcp_community_collection.hvs_secrets', 
+                       'organization_id=' ~ hcp_organisation_id, 
+                       'project_id=' ~ hcp_project_id,
+                       'app_name=' ~ test_app_name) }}"
+
+    - name: Debug output
+      debug:
+        var: all_secrets
+
+    - name: Verify basic secrets structure
+      assert:
+        that:
+          - all_secrets is defined
+          - all_secrets is sequence
+          - all_secrets | length > 0
+          - all_secrets[0] is sequence
+        fail_msg: "Basic secrets structure validation failed"
+
+    # Test pagination
+    - name: Test pagination with single result
+      set_fact:
+        single_page: "{{ lookup('benemon.hcp_community_collection.hvs_secrets', 
+                        'organization_id=' ~ hcp_organisation_id, 
+                        'project_id=' ~ hcp_project_id,
+                        'app_name=' ~ test_app_name,
+                        'page_size=1',
+                        'max_pages=1') }}"
+
+    - name: Verify pagination
+      assert:
+        that:
+          - single_page | length <= 1
+        fail_msg: "Pagination test failed - more results than expected"
+
+    # Test name filtering
+    - name: Test name filtering
+      set_fact:
+        filtered_secrets: "{{ lookup('benemon.hcp_community_collection.hvs_secrets', 
+                           'organization_id=' ~ hcp_organisation_id, 
+                           'project_id=' ~ hcp_project_id,
+                           'app_name=' ~ test_app_name,
+                           'name_contains=Step') }}"
+
+    - name: debug output
+      debug:
+        var: filtered_secrets
+
+    - name: Verify name filtering
+      assert:
+        that:
+          - filtered_secrets is defined
+          - filtered_secrets is iterable
+          - filtered_secrets | length > 0
+          - filtered_secrets | selectattr('name', 'search', 'Step') | list | length == filtered_secrets | length
+        fail_msg: "Name filtering failed or did not return expected results"
+        success_msg: "Name filtering successful"
+      when: filtered_secrets is defined
+
+    # Test data structure completeness
+    - name: Verify complete secret data structure
+      assert:
+        that:
+          # Required fields
+          - item.name is defined
+          - item.type is defined
+          - item.latest_version is defined
+          - item.created_at is defined
+          - item.created_by is defined
+          # Created by structure
+          - item.created_by.name is defined
+          - item.created_by.type is defined
+          # Optional or conditional fields
+          - item.provider is defined or item.provider is undefined
+          - item.sync_status is defined or item.sync_status is undefined
+          - item.version_count is defined
+        fail_msg: "Secret data structure incomplete for secret: {{ item.name }}"
+      loop: "{{ all_secrets }}"
+
+    # Test type filtering
+    - name: Test type filtering
+      set_fact:
+        type_filtered_secrets: "{{ lookup('benemon.hcp_community_collection.hvs_secrets', 
+                               'organization_id=' ~ hcp_organisation_id, 
+                               'project_id=' ~ hcp_project_id,
+                               'app_name=' ~ test_app_name,
+                               'types=kv') }}"
+
+    - name: Verify type filtering
+      assert:
+        that:
+          - type_filtered_secrets | map(attribute='type') | unique | list == ['kv']
+        fail_msg: "Type filtering did not return only kv secrets"
+        success_msg: "Type filtering successful"
+      when: type_filtered_secrets | length > 0
+
+    # Test disabled pagination
+    - name: Test with disabled pagination
+      set_fact:
+        no_pagination: "{{ lookup('benemon.hcp_community_collection.hvs_secrets', 
+                         'organization_id=' ~ hcp_organisation_id, 
+                         'project_id=' ~ hcp_project_id,
+                         'app_name=' ~ test_app_name,
+                         'disable_pagination=true') }}"
+
+    - name: debug output
+      debug:
+        var: no_pagination
+
+    - name: Verify disabled pagination result
+      assert:
+        that:
+          - no_pagination is sequence
+        fail_msg: "Disabled pagination test failed"
+
+    # Print final results for debugging
+    - name: Show test results
+      debug:
+        msg: |
+          Total secrets found: {{ all_secrets | length }}
+          Secrets with pagination: {{ single_page | length }}
+          Filtered secrets found: {{ filtered_secrets | default([]) | length }}
+          Secrets without pagination: {{ no_pagination | length }}
+
+  rescue:
+    - name: Handle test failures
+      fail:
+        msg: "Integration test failed: {{ ansible_failed_result | default('Unknown error') }}"

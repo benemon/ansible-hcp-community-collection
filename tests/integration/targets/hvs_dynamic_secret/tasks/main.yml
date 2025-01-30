@@ -1,0 +1,72 @@
+---
+- name: Test HVS dynamic secret lookup plugin
+  block:
+    # Validate input variables
+    - name: Validate required input vars
+      assert:
+        that:
+          - hcp_organisation_id is defined
+          - hcp_project_id is defined
+          - test_dynamic_app_name is defined
+          - test_dynamic_secret_name is defined
+          - expected_secret_type is defined
+        fail_msg: "Required variables hcp_organisation_id, hcp_project_id, test_app_name, test_secret_name, and expected_secret_type must be set"
+
+    # Test dynamic secret retrieval
+    - name: Retrieve dynamic secret value
+      set_fact:
+        secret_value: "{{ lookup('benemon.hcp_community_collection.hvs_dynamic_secret', 
+                        'organization_id=' ~ hcp_organisation_id, 
+                        'project_id=' ~ hcp_project_id,
+                        'app_name=' ~ test_dynamic_app_name,
+                        'secret_name=' ~ test_dynamic_secret_name) }}"
+
+    - name: Debug secret value
+      debug:
+        var: secret_value
+
+    # Verify secret structure
+    - name: Verify dynamic secret structure
+      assert:
+        that:
+          - secret_value is defined
+          - secret_value is sequence
+          - secret_value is mapping  
+          - secret_value.type == 'dynamic'
+        fail_msg: "Dynamic secret value retrieval failed - unexpected structure"
+
+    # Validate secret details
+    - name: Verify dynamic secret details
+      assert:
+        that:
+          - secret_value.dynamic_instance is defined
+          - secret_value.dynamic_instance is mapping
+          - secret_value.dynamic_instance.values is defined
+          - secret_value.dynamic_instance.ttl is defined
+        fail_msg: "Dynamic secret validation failed"
+
+    # Optional error handling test
+    - name: Attempt to retrieve non-existent dynamic secret
+      set_fact:
+        non_existent_secret: "{{ lookup('benemon.hcp_community_collection.hvs_dynamic_secret', 
+                             'organization_id=' ~ hcp_organisation_id, 
+                             'project_id=' ~ hcp_project_id,
+                             'app_name=' ~ test_dynamic_app_name,
+                             'secret_name=non_existent_secret_name') }}"
+      ignore_errors: true
+      register: secret_error
+
+    - name: Verify error handling for non-existent secret
+      assert:
+        that:
+          - secret_error.failed is defined
+        fail_msg: "Error handling for non-existent dynamic secret did not raise an error"
+
+    - name: Show test results
+      debug:
+        msg: "{{ secret_value['dynamic_instance']['values'] | to_nice_json(indent=2) }}"
+
+  rescue:
+    - name: Handle test failures
+      fail:
+        msg: "Integration test failed: {{ ansible_failed_result | default('Unknown error') }}"

@@ -1,0 +1,5 @@
+ansible-core
+pytest
+pytest-mock
+requests
+responses
