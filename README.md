@@ -6,7 +6,9 @@
 
 The `benemon.hcp_community_collection` Ansible Collection provides lookup plugins and utility modules for interacting with HashiCorp Cloud Platform (HCP) services.
 
-It currently focuses on enabling the consumption of HashiCorp Vault Secrets in Ansible.
+### Implemented Services
+
+* [HashiCorp Vault Secrets](https://developer.hashicorp.com/hcp/docs/vault-secrets)
 
 ## Requirements
 
