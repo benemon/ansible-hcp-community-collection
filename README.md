@@ -1,8 +1,8 @@
-# Ansible Collection: benemon.hcp_community
+# Ansible Collection: benemon.hcp_community_collection
 
 ## Overview
 
-The `benemon.hcp_community` Ansible Collection provides lookup plugins and utility modules for interacting with HashiCorp Cloud Platform (HCP) services.
+The `benemon.hcp_community_collection` Ansible Collection provides lookup plugins and utility modules for interacting with HashiCorp Cloud Platform (HCP) services.
 
 It currently focuses on enabling the consumption of HashiCorp Vault Secrets in Ansible.
 
@@ -29,14 +29,14 @@ There are no expectations that earlier versions of Python will not work, but you
 To install the `benemon.hcp_community` collection, run:
 
 ```bash
-ansible-galaxy collection install benemon.hcp_community
+ansible-galaxy collection install benemon.hcp_community_collection
 ```
 
 Alternatively, add it to a `requirements.yml` file:
 
 ```yaml
 collections:
-  - name: benemon.hcp_community
+  - name: benemon.hcp_community_collection
 ```
 
 Then install it with:
@@ -51,7 +51,7 @@ ansible-galaxy collection install -r requirements.yml
 
 ## Available Lookup Plugins
 
-The `benemon.hcp_community` collection provides the following lookup plugins:
+The `benemon.hcp_community_collection` collection provides the following lookup plugins:
 
 | Plugin Name | Description |
 |-------------|------------|
@@ -70,7 +70,7 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
 ```yaml
 - name: Retrieve a static secret
   set_fact:
-    secret_value: "{{ lookup('benemon.hcp_community.hvs_static_secret', 
+    secret_value: "{{ lookup('benemon.hcp_community_collection.hvs_static_secret', 
                    'organization_id=' ~ hcp_organisation_id, 
                    'project_id=' ~ hcp_project_id,
                    'app_name=' ~ test_app_name,
@@ -86,7 +86,7 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
 ```yaml
 - name: Retrieve a dynamic secret
   set_fact:
-    secret_value: "{{ lookup('benemon.hcp_community.hvs_dynamic_secret', 
+    secret_value: "{{ lookup('benemon.hcp_community_collection.hvs_dynamic_secret', 
                    'organization_id=' ~ hcp_organisation_id, 
                    'project_id=' ~ hcp_project_id,
                    'app_name=' ~ test_dynamic_app_name,
@@ -102,7 +102,7 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
 ```yaml
 - name: Retrieve a rotating secret
   set_fact:
-    secret_value: "{{ lookup('benemon.hcp_community.hvs_rotating_secret', 
+    secret_value: "{{ lookup('benemon.hcp_community_collection.hvs_rotating_secret', 
                    'organization_id=' ~ hcp_organisation_id, 
                    'project_id=' ~ hcp_project_id,
                    'app_name=' ~ test_rotating_app_name,
@@ -118,7 +118,7 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
 ```yaml
 - name: Retrieve all secret metadata from an app
   set_fact:
-    all_secrets: "{{ lookup('benemon.hcp_community.hvs_secrets', 
+    all_secrets: "{{ lookup('benemon.hcp_community_collection.hvs_secrets', 
                    'organization_id=' ~ hcp_organisation_id, 
                    'project_id=' ~ hcp_project_id,
                    'app_name=' ~ test_app_name) }}"
@@ -133,7 +133,7 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
 ```yaml
 - name: Retrieve all applications in an HCP Organisation
   set_fact:
-    all_apps: "{{ lookup('benemon.hcp_community.hvs_apps', 
+    all_apps: "{{ lookup('benemon.hcp_community_collection.hvs_apps', 
                 'organization_id=' ~ hcp_organisation_id, 
                 'project_id=' ~ hcp_project_id) }}"
 
