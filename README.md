@@ -9,6 +9,7 @@ The `benemon.hcp_community_collection` Ansible Collection provides lookup plugin
 ### Implemented Services
 
 * [HashiCorp Vault Secrets](https://developer.hashicorp.com/hcp/docs/vault-secrets)
+* [HashiCorp HCP Packer](https://developer.hashicorp.com/hcp/docs/packer)
 
 ## Requirements
 
