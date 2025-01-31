@@ -49,7 +49,8 @@ jobs:
           # Copy test results
           mkdir -p ${GITHUB_WORKSPACE}/junit
           if [ -d "tests/output/junit" ]; then
-            cp tests/output/junit/python${matrix.python-version}-controller-units.xml ${GITHUB_WORKSPACE}/junit/
+            PYVER="${{ matrix.python-version }}"
+            cp "tests/output/junit/python${PYVER}-controller-units.xml" "${GITHUB_WORKSPACE}/junit/"
           fi
 
       - name: Upload Test Results
