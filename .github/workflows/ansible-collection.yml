@@ -37,26 +37,24 @@ jobs:
 
       - name: Run unit tests
         run: |
-          # Change to collection directory
+          # Create directory structure and move files
           cd ..
           mkdir -p ansible_collections/benemon
-          mv ${GITHUB_WORKSPACE} ansible_collections/benemon/hcp_community_collection
+          cp -r ${GITHUB_WORKSPACE} ansible_collections/benemon/hcp_community_collection
           cd ansible_collections/benemon/hcp_community_collection
           
           # Run ansible-test units
           ansible-test units --venv --python ${{ matrix.python-version }} -v
           
-          # Create junit directory at repo root and copy results
-          cd ${GITHUB_WORKSPACE}
-          mkdir -p junit
-          
-          if [ -d "ansible_collections/benemon/hcp_community_collection/tests/output/junit" ]; then
-            cp ansible_collections/benemon/hcp_community_collection/tests/output/junit/python${matrix.python-version}-controller-units.xml junit/
+          # Copy test results
+          mkdir -p ${GITHUB_WORKSPACE}/junit
+          if [ -d "tests/output/junit" ]; then
+            cp tests/output/junit/python${matrix.python-version}-controller-units.xml ${GITHUB_WORKSPACE}/junit/
           fi
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: test-results-${{ matrix.python-version }}
           path: junit/*.xml
