@@ -38,8 +38,9 @@ jobs:
       - name: Run unit tests
         run: |
           # Change to collection directory
-          cd ../
-          mv ${GITHUB_WORKSPACE} ./ansible_collections/benemon/hcp_community_collection
+          cd ..
+          mkdir -p ansible_collections/benemon
+          mv ${GITHUB_WORKSPACE} ansible_collections/benemon/hcp_community_collection
           cd ansible_collections/benemon/hcp_community_collection
           
           # Run ansible-test units
