@@ -4,3 +4,4 @@ integration_config.yml
 *.out
 inventory
 .DS_Store
+tests/output/**
