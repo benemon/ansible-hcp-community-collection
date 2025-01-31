@@ -157,6 +157,9 @@ import json
 display = Display()
 
 class LookupModule(HCPLookupBase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.api_version = "2023-11-28"
     def run(self, terms, variables=None, **kwargs):
         """List secrets in an HVS app."""
         variables = variables or {}

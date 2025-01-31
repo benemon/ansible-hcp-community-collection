@@ -15,7 +15,6 @@ class HCPLookupBase(LookupBase):
         """Initialize the base class with common configuration."""
         super().__init__(*args, **kwargs)
         self.base_url = "https://api.cloud.hashicorp.com"
-        self.api_version = "2023-11-28"
 
         # Warn macOS users about potential fork() safety issues
         if sys.platform == 'darwin' and 'OBJC_DISABLE_INITIALIZE_FORK_SAFETY' not in os.environ:
@@ -233,7 +232,7 @@ class HCPLookupBase(LookupBase):
             return {'results': response}
 
         # Check for known result keys
-        result_keys = ['apps', 'secrets', 'secret', 'integrations']
+        result_keys = ['apps', 'secrets', 'secret', 'integrations', 'version', 'channel']
         for key in result_keys:
             if key in response:
                 return {'results': response[key]}
