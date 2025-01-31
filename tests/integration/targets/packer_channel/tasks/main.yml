@@ -1,0 +1,118 @@
+---
+- name: Test Packer Channel lookup plugin
+  block:
+    # Validate input variables
+    - name: Validate required input vars
+      assert:
+        that:
+          - hcp_organisation_id is defined
+          - hcp_project_id is defined
+          - test_bucket_name is defined
+          - test_channel_name is defined
+        fail_msg: "Required variables hcp_organisation_id, hcp_project_id, test_bucket_name, and test_channel_name must be set"
+
+    # Test basic functionality
+    - name: Retrieve channel information
+      set_fact:
+        channel_info: "{{ lookup('benemon.hcp_community_collection.packer_channel', 
+                       'organization_id=' ~ hcp_organisation_id, 
+                       'project_id=' ~ hcp_project_id,
+                       'bucket_name=' ~ test_bucket_name,
+                       'channel_name=' ~ test_channel_name) }}"
+
+    - name: Debug channel info
+      debug:
+        var: channel_info
+
+    # Verify channel retrieval
+    - name: Verify channel information structure
+      assert:
+        that:
+          - channel_info is defined
+          - channel_info is mapping
+          - channel_info.name is defined
+          - channel_info.name == test_channel_name
+          - channel_info.bucket_name == test_bucket_name
+        fail_msg: "Channel information retrieval failed - unexpected structure"
+
+    # Check version assignment if present
+    - name: Verify version assignment
+      assert:
+        that:
+          - channel_info.version is defined
+          - channel_info.version is mapping
+          - channel_info.version.id is defined
+          - channel_info.version.fingerprint is defined
+        fail_msg: "Channel version information is missing or invalid"
+      when: channel_info.version is defined
+
+    # Check builds and artifacts if version is present
+    - name: Verify builds and artifacts
+      assert:
+        that:
+          - channel_info.version.builds is defined
+          - channel_info.version.builds is sequence
+          - channel_info.version.builds | length > 0
+          - channel_info.version.builds[0].artifacts is defined
+          - channel_info.version.builds[0].artifacts is sequence
+          - channel_info.version.builds[0].artifacts | length > 0
+        fail_msg: "Build and artifact information is missing or invalid"
+      when: channel_info.version is defined
+
+    # Check build details
+    - name: Verify build details
+      assert:
+        that:
+          - build.id is defined
+          - build.component_type is defined
+          - build.status is defined
+          - build.platform is defined
+        fail_msg: "Build details are missing or invalid"
+      loop: "{{ channel_info.version.builds }}"
+      loop_control:
+        loop_var: build
+      when: channel_info.version is defined
+
+    # Check artifact details
+    - name: Verify artifact details
+      assert:
+        that:
+          - artifact.id is defined
+          - artifact.external_identifier is defined
+          - artifact.region is defined
+        fail_msg: "Artifact details are missing or invalid"
+      loop: "{{ channel_info.version.builds | map(attribute='artifacts') | flatten }}"
+      loop_control:
+        loop_var: artifact
+      when: channel_info.version is defined
+
+    # Error handling test
+    - name: Attempt to retrieve non-existent channel
+      set_fact:
+        non_existent_channel: "{{ lookup('benemon.hcp_community_collection.packer_channel', 
+                              'organization_id=' ~ hcp_organisation_id, 
+                              'project_id=' ~ hcp_project_id,
+                              'bucket_name=' ~ test_bucket_name,
+                              'channel_name=non_existent_channel') }}"
+      ignore_errors: true
+      register: channel_error
+
+    - name: Verify error handling for non-existent channel
+      assert:
+        that:
+          - channel_error.failed is defined
+        fail_msg: "Error handling for non-existent channel did not raise an error"
+
+    # Print final results for debugging
+    - name: Show test results
+      debug:
+        msg: |
+          Channel retrieved successfully
+          Name: {{ channel_info.name }}
+          Version: {{ channel_info.version.fingerprint if channel_info.version is defined else 'No version assigned' }}
+          Build count: {{ channel_info.version.builds | length if channel_info.version is defined else 0 }}
+
+  rescue:
+    - name: Handle test failures
+      fail:
+        msg: "Integration test failed: {{ ansible_failed_result | default('Unknown error') }}"

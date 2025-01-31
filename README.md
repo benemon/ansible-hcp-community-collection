@@ -8,8 +8,8 @@ The `benemon.hcp_community_collection` Ansible Collection provides lookup plugin
 
 ### Implemented Services
 
-* [HashiCorp Vault Secrets](https://developer.hashicorp.com/hcp/docs/vault-secrets)
-* [HashiCorp HCP Packer](https://developer.hashicorp.com/hcp/docs/packer)
+* [HashiCorp Vault Secrets](https://developer.hashicorp.com/hcp/docs/vault-secrets) - Partial
+* [HashiCorp HCP Packer](https://developer.hashicorp.com/hcp/docs/packer) - Partial
 
 ## Requirements
 
@@ -65,10 +65,14 @@ The `benemon.hcp_community_collection` collection provides the following lookup 
 | `hvs_rotating_secret` | Retrieve a rotating secret from an Application in HCP Vault Secrets. |
 | `hvs_secrets` | Retrieve all secret metadata from an Application in HCP Vault Secrets. |
 | `hvs_apps` | Retrieve Application metadata from Applications in HCP Vault Secrets|
+| `packer_channel` | Retrieve Channel metadata from HCP Packer. |
+| `packer_version` | Retrieve Version metadata from HCP Packer. |
 
 Each plugin can be used in playbooks by invoking the `lookup` function, as demonstrated in the example below.
 
 ### Example Usage
+
+#### HashiCorp Vault Secrets
 
 ```yaml
 - name: run through some tasks with HashiCorp Vault Secrets
@@ -135,6 +139,8 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
     debug:
       var: all_apps
 ```
+
+#### HCP Packer
 
 ## Testing
 
