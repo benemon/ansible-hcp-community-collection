@@ -1,0 +1,117 @@
+name: Ansible Collection CI/CD
+
+on:
+  # Nightly unit tests
+  schedule:
+    - cron: '0 0 * * *'  # Runs at 00:00 UTC every day
+  
+  # Manual trigger for publishing
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to Ansible Galaxy'
+        type: boolean
+        required: true
+        default: false
+
+jobs:
+  test:
+    name: Run ansible-test units
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible
+
+      - name: Run unit tests
+        run: |
+          # Change to collection directory
+          cd ../
+          mv ${GITHUB_WORKSPACE} ./ansible_collections/benemon/hcp_community_collection
+          cd ansible_collections/benemon/hcp_community_collection
+          
+          # Run ansible-test units
+          ansible-test units --venv --python ${{ matrix.python-version }} -v
+          
+          # Create junit directory at repo root and copy results
+          cd ${GITHUB_WORKSPACE}
+          mkdir -p junit
+          
+          if [ -d "ansible_collections/benemon/hcp_community_collection/tests/output/junit" ]; then
+            cp ansible_collections/benemon/hcp_community_collection/tests/output/junit/python${matrix.python-version}-controller-units.xml junit/
+          fi
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-${{ matrix.python-version }}
+          path: junit/*.xml
+          retention-days: 1
+
+  publish-test-results:
+    name: Publish Test Results
+    needs: test
+    runs-on: ubuntu-latest
+    if: always()  # Run even if tests fail
+
+    steps:
+      - name: Download Test Results
+        uses: actions/download-artifact@v3
+        with:
+          path: junit
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          junit_files: "junit/**/*.xml"
+          check_name: "Unit Test Results"
+
+  build-and-publish:
+    name: Build and Publish Collection
+    needs: test
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' && 
+      github.event.inputs.publish == 'true' && 
+      github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible
+
+      - name: Build Ansible collection
+        run: ansible-galaxy collection build
+
+      - name: Publish to Ansible Galaxy
+        run: |
+          if [ -f galaxy.yml ]; then
+            COLLECTION_ARCHIVE=$(ls *.tar.gz)
+            ansible-galaxy collection publish \
+              --api-key ${{ secrets.ANSIBLE_GALAXY_API_KEY }} \
+              $COLLECTION_ARCHIVE
+          else
+            echo "galaxy.yml not found"
+            exit 1
+          fi
