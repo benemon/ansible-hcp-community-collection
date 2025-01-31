@@ -66,6 +66,9 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: always()  # Run even if tests fail
+    permissions:
+      checks: write
+      pull-requests: write
 
     steps:
       - name: Download Test Results
@@ -78,6 +81,7 @@ jobs:
         with:
           junit_files: "junit/**/*.xml"
           check_name: "Unit Test Results"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
   build-and-publish:
     name: Build and Publish Collection
