@@ -121,11 +121,7 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
   - name: Show all secrets
     debug:
       var: all_secrets
-  ```
 
-  #### Retrieving Application
-
-  ```yaml
   - name: Retrieve all applications in an HCP Organisation
     set_fact:
       all_apps: "{{ lookup('benemon.hcp_community_collection.hvs_apps', 
