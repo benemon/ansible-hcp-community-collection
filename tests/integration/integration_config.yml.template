@@ -1,0 +1,27 @@
+# core configuration for integration tests
+hcp_client_id: "${HCP_CLIENT_ID}"
+hcp_client_secret: "${HCP_CLIENT_SECRET}"
+hcp_organisation_id: "${HCP_CLIENT_ORGANISATION}"
+hcp_project_id: "${HCP_CLIENT_PROJECT}"
+
+
+# hvs_secret configuration for integration tests
+test_app_name: "sample-app"
+test_secret_name: "Step1"
+non_existent_secret_name: "BackwardsStep"
+expected_secret_type: "kv"
+
+# hvs_dynamic_secret configuration for integration tests
+test_dynamic_app_name: ansible-dynamic-secret-test
+test_dynamic_secret_name: ansible_test_role
+
+# hvs_rotating_secret configuration for integration tests
+test_rotating_app_name: ansible-rotating-secret-test
+test_rotating_secret_name: my_keys
+
+# packer_channel configuration for integration tests
+test_bucket_name: "rhel9-base"
+test_channel_name: "latest"
+
+# packer_version configuration for integration tests
+test_fingerprint: "${PACKER_TEST_FINGERPRINT}"
