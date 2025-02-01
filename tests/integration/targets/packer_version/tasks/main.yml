@@ -1,0 +1,105 @@
+---
+- name: Test Packer Version lookup plugin
+  block:
+    # Validate input variables
+    - name: Validate required input vars
+      assert:
+        that:
+          - hcp_organisation_id is defined
+          - hcp_project_id is defined
+          - test_bucket_name is defined
+          - test_fingerprint is defined
+        fail_msg: "Required variables hcp_organisation_id, hcp_project_id, test_bucket_name, and test_fingerprint must be set"
+
+    # Test basic functionality
+    - name: Retrieve version information
+      set_fact:
+        version_info: "{{ lookup('benemon.hcp_community_collection.packer_version', 
+                       'organization_id=' ~ hcp_organisation_id, 
+                       'project_id=' ~ hcp_project_id,
+                       'bucket_name=' ~ test_bucket_name,
+                       'fingerprint=' ~ test_fingerprint) }}"
+
+    # Verify version retrieval
+    - name: Verify version information structure
+      assert:
+        that:
+          - version_info is defined
+          - version_info is mapping
+          - version_info.fingerprint is defined
+          - version_info.fingerprint == test_fingerprint
+          - version_info.bucket_name == test_bucket_name
+          - version_info.status is defined
+          - version_info.template_type is defined
+        fail_msg: "Version information retrieval failed - unexpected structure"
+
+    # Check builds
+    - name: Verify builds
+      assert:
+        that:
+          - version_info.builds is defined
+          - version_info.builds is sequence
+          - version_info.builds | length > 0
+        fail_msg: "Build information is missing or invalid"
+
+    # Check build details
+    - name: Verify build details
+      assert:
+        that:
+          - build.id is defined
+          - build.version_id == version_info.id
+          - build.component_type is defined
+          - build.status is defined
+          - build.platform is defined
+          - build.artifacts is defined
+          - build.artifacts is sequence
+        fail_msg: "Build details are missing or invalid for build {{ build.id }}"
+      loop: "{{ version_info.builds }}"
+      loop_control:
+        loop_var: build
+
+    # Check artifacts for each build
+    - name: Verify artifact details
+      assert:
+        that:
+          - artifact.id is defined
+          - artifact.external_identifier is defined
+          - artifact.region is defined
+          - artifact.created_at is defined
+        fail_msg: "Artifact details are missing or invalid for artifact {{ artifact.id }}"
+      loop: "{{ version_info.builds | map(attribute='artifacts') | flatten }}"
+      loop_control:
+        loop_var: artifact
+
+    # Check platform-specific artifacts if present
+    - name: Verify AWS artifacts
+      assert:
+        that:
+          - artifact.external_identifier | regex_search('^ami-')
+        fail_msg: "Invalid AWS AMI identifier format"
+      loop: "{{ version_info.builds | selectattr('platform', 'eq', 'aws') | map(attribute='artifacts') | flatten }}"
+      loop_control:
+        loop_var: artifact
+      when: version_info.builds | selectattr('platform', 'eq', 'aws') | list | length > 0
+
+    # Error handling test
+    - name: Attempt to retrieve non-existent version
+      set_fact:
+        non_existent_version: "{{ lookup('benemon.hcp_community_collection.packer_version', 
+                              'organization_id=' ~ hcp_organisation_id, 
+                              'project_id=' ~ hcp_project_id,
+                              'bucket_name=' ~ test_bucket_name,
+                              'fingerprint=non_existent_fingerprint') }}"
+      ignore_errors: true
+      register: version_error
+
+    - name: Verify error handling for non-existent version
+      assert:
+        that:
+          - version_error.failed is defined
+        fail_msg: "Error handling for non-existent version did not raise an error"
+
+  rescue:
+    - name: Handle test failures
+      fail:
+        msg: "Integration test failed: {{ ansible_failed_result | default('Unknown error') }}"

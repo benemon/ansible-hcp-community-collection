@@ -18,10 +18,6 @@
                        'project_id=' ~ hcp_project_id,
                        'app_name=' ~ test_app_name) }}"
 
-    - name: Debug output
-      debug:
-        var: all_secrets
-
     - name: Verify basic secrets structure
       assert:
         that:
@@ -55,10 +51,6 @@
                            'project_id=' ~ hcp_project_id,
                            'app_name=' ~ test_app_name,
                            'name_contains=Step') }}"
-
-    - name: debug output
-      debug:
-        var: filtered_secrets
 
     - name: Verify name filtering
       assert:
@@ -117,24 +109,11 @@
                          'app_name=' ~ test_app_name,
                          'disable_pagination=true') }}"
 
-    - name: debug output
-      debug:
-        var: no_pagination
-
     - name: Verify disabled pagination result
       assert:
         that:
           - no_pagination is sequence
         fail_msg: "Disabled pagination test failed"
-
-    # Print final results for debugging
-    - name: Show test results
-      debug:
-        msg: |
-          Total secrets found: {{ all_secrets | length }}
-          Secrets with pagination: {{ single_page | length }}
-          Filtered secrets found: {{ filtered_secrets | default([]) | length }}
-          Secrets without pagination: {{ no_pagination | length }}
 
   rescue:
     - name: Handle test failures

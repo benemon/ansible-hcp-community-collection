@@ -100,15 +100,6 @@
           - no_pagination is sequence
         fail_msg: "Disabled pagination test failed"
 
-    # Print final results for debugging
-    - name: Show test results
-      debug:
-        msg: |
-          Total apps found: {{ all_apps | length }}
-          Apps with pagination: {{ single_page | length }}
-          Filtered apps found: {{ filtered_apps | length }}
-          Apps without pagination: {{ no_pagination | length }}
-
   rescue:
     - name: Handle test failures
       fail:

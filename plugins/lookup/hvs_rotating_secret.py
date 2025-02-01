@@ -112,6 +112,7 @@ RETURN = r"""
 """
 
 from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.base.hcp_base import HCPLookupBase
+from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.api_versions import get_api_version
 from ansible.errors import AnsibleError
 from ansible.utils.display import Display
 import json
@@ -119,6 +120,13 @@ import json
 display = Display()
 
 class LookupModule(HCPLookupBase):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        try:
+            self.api_version = get_api_version("hvs")  # Fetch API version dynamically
+        except ValueError as e:
+            display.error(f"Failed to get API version: {str(e)}")
+            raise AnsibleError(str(e))  # Convert to AnsibleError for better error reporting
     def run(self, terms, variables=None, **kwargs):
         """Retrieve a rotating secret value from HVS."""
         variables = variables or {}

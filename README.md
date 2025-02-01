@@ -8,7 +8,8 @@ The `benemon.hcp_community_collection` Ansible Collection provides lookup plugin
 
 ### Implemented Services
 
-* [HashiCorp Vault Secrets](https://developer.hashicorp.com/hcp/docs/vault-secrets)
+* [HashiCorp Vault Secrets](https://developer.hashicorp.com/hcp/docs/vault-secrets) - Partial
+* [HashiCorp HCP Packer](https://developer.hashicorp.com/hcp/docs/packer) - Partial
 
 ## Requirements
 
@@ -64,13 +65,17 @@ The `benemon.hcp_community_collection` collection provides the following lookup 
 | `hvs_rotating_secret` | Retrieve a rotating secret from an Application in HCP Vault Secrets. |
 | `hvs_secrets` | Retrieve all secret metadata from an Application in HCP Vault Secrets. |
 | `hvs_apps` | Retrieve Application metadata from Applications in HCP Vault Secrets|
+| `packer_channel` | Retrieve Channel metadata from HCP Packer. |
+| `packer_version` | Retrieve Version metadata from HCP Packer. |
 
 Each plugin can be used in playbooks by invoking the `lookup` function, as demonstrated in the example below.
 
 ### Example Usage
 
+#### HashiCorp Vault Secrets
+
 ```yaml
-- name: run through some tasks with HashiCorp Vault Secrets
+- name: run through some tasks with HashiCorp HCP Vault Secrets
   hosts: localhost
   vars:
     hcp_organisation_id: "my-organisation-id"
@@ -133,6 +138,41 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
   - name: Show applications
     debug:
       var: all_apps
+```
+
+#### HCP Packer
+
+```yaml
+- name: run through some tasks with HashiCorp HCP Packer
+  hosts: localhost
+  vars:
+    hcp_organisation_id: "my-organisation-id"
+    hcp_project_id: "my-project-id"
+
+  tasks:
+  - name: Retrieve channel information
+    set_fact:
+      channel_info: "{{ lookup('benemon.hcp_community_collection.packer_channel', 
+                    'organization_id=' ~ hcp_organisation_id, 
+                    'project_id=' ~ hcp_project_id,
+                    'bucket_name=my-bucker-name',
+                    'channel_name=latest') }}"
+
+  - name: Show channel info
+    debug:
+      var: channel_info
+
+    - name: Retrieve version information
+      set_fact:
+        version_info: "{{ lookup('benemon.hcp_community_collection.packer_version', 
+                       'organization_id=' ~ hcp_organisation_id, 
+                       'project_id=' ~ hcp_project_id,
+                       'bucket_name=my-bucket-name',
+                       'fingerprint=abc123') }}"
+
+    - name: Show version info
+      debug:
+        var: version_info
 ```
 
 ## Testing

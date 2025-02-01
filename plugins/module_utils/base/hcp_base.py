@@ -5,8 +5,18 @@ import os
 import requests
 import sys
 import json
+from datetime import datetime, timezone, timedelta
 
 display = Display()
+
+# Module level token cache
+_TOKEN_CACHE = {
+    'token': None,
+    'issued_at': None,
+    'expires_in': None,
+    'client_id': None,
+    'client_secret': None
+}
 
 class HCPLookupBase(LookupBase):
     """Base class for HCP lookup plugins."""
@@ -15,7 +25,6 @@ class HCPLookupBase(LookupBase):
         """Initialize the base class with common configuration."""
         super().__init__(*args, **kwargs)
         self.base_url = "https://api.cloud.hashicorp.com"
-        self.api_version = "2023-11-28"
 
         # Warn macOS users about potential fork() safety issues
         if sys.platform == 'darwin' and 'OBJC_DISABLE_INITIALIZE_FORK_SAFETY' not in os.environ:
@@ -23,6 +32,25 @@ class HCPLookupBase(LookupBase):
                 'On macOS, you may need to set OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES '
                 'if you encounter fork()-related crashes'
             )
+
+    def _should_refresh_token(self):
+        """
+        Check if token should be refreshed based on Hashicorp's 2/3 lifetime practice
+        """
+        global _TOKEN_CACHE
+        
+        if not all([_TOKEN_CACHE['token'], _TOKEN_CACHE['issued_at'], _TOKEN_CACHE['expires_in']]):
+            return True
+
+        now = datetime.now(timezone.utc)
+        issued_at = _TOKEN_CACHE['issued_at']
+        expires_in = timedelta(seconds=_TOKEN_CACHE['expires_in'])
+        
+        # Calculate how far through the token lifetime we are
+        token_age = now - issued_at
+        two_thirds_lifetime = (expires_in * 2) / 3
+
+        return token_age >= two_thirds_lifetime
 
     def _get_auth_token(self, variables):
         """
@@ -40,20 +68,42 @@ class HCPLookupBase(LookupBase):
         if token:
             return token
 
-        # Check for client credentials
+        # Get client credentials
         client_id = (variables.get('hcp_client_id') or 
                     os.environ.get('HCP_CLIENT_ID'))
         client_secret = (variables.get('hcp_client_secret') or 
                         os.environ.get('HCP_CLIENT_SECRET'))
 
-        if client_id and client_secret:
-            token = self._get_token_from_credentials(client_id, client_secret)
-            return token
+        if not (client_id and client_secret):
+            raise AnsibleError(
+                'No valid authentication found. Please set either HCP_TOKEN/hcp_token '
+                'or HCP_CLIENT_ID/hcp_client_id and HCP_CLIENT_SECRET/hcp_client_secret'
+            )
 
-        raise AnsibleError(
-            'No valid authentication found. Please set either HCP_TOKEN/hcp_token '
-            'or HCP_CLIENT_ID/hcp_client_id and HCP_CLIENT_SECRET/hcp_client_secret'
-        )
+        global _TOKEN_CACHE
+        
+        # Check if we should use cached token
+        if (_TOKEN_CACHE['token'] and 
+            _TOKEN_CACHE['client_id'] == client_id and
+            _TOKEN_CACHE['client_secret'] == client_secret and
+            not self._should_refresh_token()):
+            
+            display.vvv("Using cached token")
+            return _TOKEN_CACHE['token']
+
+        # Get new token and cache it
+        display.vvv("Getting new token")
+        token_data = self._get_token_from_credentials(client_id, client_secret)
+        
+        _TOKEN_CACHE.update({
+            'token': token_data['access_token'],
+            'issued_at': datetime.now(timezone.utc),
+            'expires_in': token_data['expires_in'],
+            'client_id': client_id,
+            'client_secret': client_secret
+        })
+        
+        return token_data['access_token']
 
     def _get_token_from_credentials(self, client_id, client_secret):
         """Get HCP authentication token using client credentials OAuth2 flow."""
@@ -83,11 +133,11 @@ class HCPLookupBase(LookupBase):
             json_response = response.json()
             display.vvv("Successfully obtained auth token")
             
-            if 'access_token' not in json_response:
+            if not all(k in json_response for k in ['access_token', 'expires_in']):
                 display.vvv(f"Unexpected response format. Keys: {list(json_response.keys())}")
-                raise KeyError('access_token not found in response')
+                raise KeyError('Missing required fields in response')
                 
-            return json_response['access_token']
+            return json_response
             
         except requests.exceptions.RequestException as e:
             raise AnsibleError(f'Failed to obtain token from client credentials: {str(e)}')
@@ -233,7 +283,7 @@ class HCPLookupBase(LookupBase):
             return {'results': response}
 
         # Check for known result keys
-        result_keys = ['apps', 'secrets', 'secret', 'integrations']
+        result_keys = ['apps', 'secrets', 'secret', 'integrations', 'version', 'channel']
         for key in result_keys:
             if key in response:
                 return {'results': response[key]}

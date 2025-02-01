@@ -140,3 +140,7 @@ def test_api_error(lookup):
         with pytest.raises(AnsibleError) as exc:
             lookup.run([], variables)
         assert 'Error listing apps' in str(exc.value)
+
+def test_api_version(lookup):
+    """Test that correct API version is used"""
+    assert lookup.api_version == '2023-11-28'
