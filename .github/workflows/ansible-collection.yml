@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.10', '3.11', '3.12', '3.13']
 
     steps:
       - uses: actions/checkout@v3
@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.10', '3.11', '3.12', '3.13']
 
     steps:
       - uses: actions/checkout@v3
@@ -110,7 +110,7 @@ jobs:
         run: |
           cd ../ansible_collections/benemon/hcp_community_collection
           ansible-test integration --venv --python ${{ matrix.python-version }} -v
-          
+
   collect-versions:
     name: Collect Version Information
     needs: [test, integration]
