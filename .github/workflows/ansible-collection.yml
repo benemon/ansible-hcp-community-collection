@@ -110,14 +110,7 @@ jobs:
         run: |
           cd ../ansible_collections/benemon/hcp_community_collection
           ansible-test integration --venv --python ${{ matrix.python-version }} -v
-
-          # Copy test results
-          mkdir -p ${GITHUB_WORKSPACE}/junit
-          if [ -d "tests/output/junit" ]; then
-            PYVER="${{ matrix.python-version }}"
-            cp "tests/output/junit/python${PYVER}-integration.xml" "${GITHUB_WORKSPACE}/junit/"
-          fi
-
+          
   collect-versions:
     name: Collect Version Information
     needs: [test, integration]
