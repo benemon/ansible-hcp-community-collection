@@ -1,8 +1,8 @@
 # core configuration for integration tests
 hcp_client_id: "${HCP_CLIENT_ID}"
 hcp_client_secret: "${HCP_CLIENT_SECRET}"
-hcp_organisation_id: "${HCP_CLIENT_ORGANISATION}"
-hcp_project_id: "${HCP_CLIENT_PROJECT}"
+hcp_organisation_id: "${HCP_ORGANISATION_ID}"
+hcp_project_id: "${HCP_PROJECT_ID}"
 
 
 # hvs_secret configuration for integration tests

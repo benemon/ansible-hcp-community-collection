@@ -99,7 +99,6 @@ jobs:
           
           # Create integration config from template
           envsubst < tests/integration/integration_config.yml.template > tests/integration/integration_config.yml
-          cat tests/integration/integration_config.yml
         env:
           HCP_CLIENT_ID: ${{ secrets.HCP_CLIENT_ID }}
           HCP_CLIENT_SECRET: ${{ secrets.HCP_CLIENT_SECRET }}
