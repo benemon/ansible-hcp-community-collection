@@ -21,10 +21,6 @@
                         'app_name=' ~ test_app_name,
                         'secret_name=' ~ test_secret_name) }}"
 
-    - name: Debug secret value
-      debug:
-        var: secret_value
-
     # Verify secret retrieval
     - name: Verify secret value structure
       assert:
@@ -83,14 +79,6 @@
         that:
           - secret_error.failed is defined
         fail_msg: "Error handling for non-existent secret did not raise an error"
-
-    # Print final results for debugging
-    - name: Show test results
-      debug:
-        msg: |
-          Secret retrieved successfully
-          Type: {{ secret_value.type }}
-          Value: {{ secret_value.static_version.value }}
 
   rescue:
     - name: Handle test failures

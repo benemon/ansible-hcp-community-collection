@@ -21,10 +21,6 @@
                         'app_name=' ~ test_dynamic_app_name,
                         'secret_name=' ~ test_dynamic_secret_name) }}"
 
-    - name: Debug secret value
-      debug:
-        var: secret_value
-
     # Verify secret structure
     - name: Verify dynamic secret structure
       assert:
@@ -61,10 +57,6 @@
         that:
           - secret_error.failed is defined
         fail_msg: "Error handling for non-existent dynamic secret did not raise an error"
-
-    - name: Show test results
-      debug:
-        msg: "{{ secret_value['dynamic_instance']['values'] | to_nice_json(indent=2) }}"
 
   rescue:
     - name: Handle test failures

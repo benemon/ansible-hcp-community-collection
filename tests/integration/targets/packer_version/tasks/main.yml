@@ -20,10 +20,6 @@
                        'bucket_name=' ~ test_bucket_name,
                        'fingerprint=' ~ test_fingerprint) }}"
 
-    - name: Debug version info
-      debug:
-        var: version_info
-
     # Verify version retrieval
     - name: Verify version information structure
       assert:
@@ -102,16 +98,6 @@
         that:
           - version_error.failed is defined
         fail_msg: "Error handling for non-existent version did not raise an error"
-
-    # Print final results for debugging
-    - name: Show test results
-      debug:
-        msg: |
-          Version retrieved successfully
-          Fingerprint: {{ version_info.fingerprint }}
-          Status: {{ version_info.status }}
-          Build count: {{ version_info.builds | length }}
-          Total artifacts: {{ version_info.builds | map(attribute='artifacts') | flatten | list | length }}
 
   rescue:
     - name: Handle test failures

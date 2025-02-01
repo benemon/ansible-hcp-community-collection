@@ -20,10 +20,6 @@
                        'bucket_name=' ~ test_bucket_name,
                        'channel_name=' ~ test_channel_name) }}"
 
-    - name: Debug channel info
-      debug:
-        var: channel_info
-
     # Verify channel retrieval
     - name: Verify channel information structure
       assert:
@@ -102,15 +98,6 @@
         that:
           - channel_error.failed is defined
         fail_msg: "Error handling for non-existent channel did not raise an error"
-
-    # Print final results for debugging
-    - name: Show test results
-      debug:
-        msg: |
-          Channel retrieved successfully
-          Name: {{ channel_info.name }}
-          Version: {{ channel_info.version.fingerprint if channel_info.version is defined else 'No version assigned' }}
-          Build count: {{ channel_info.version.builds | length if channel_info.version is defined else 0 }}
 
   rescue:
     - name: Handle test failures

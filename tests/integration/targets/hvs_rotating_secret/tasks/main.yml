@@ -21,10 +21,6 @@
                         'app_name=' ~ test_rotating_app_name,
                         'secret_name=' ~ test_rotating_secret_name) }}"
 
-    - name: Debug secret value
-      debug:
-        var: secret_value
-
     # Verify secret structure
     - name: Verify rotating secret structure
       assert:
@@ -63,10 +59,6 @@
         that:
           - secret_error.failed is defined
         fail_msg: "Error handling for non-existent rotating secret did not raise an error"
-
-    - name: Show test results
-      debug:
-        msg: "{{ secret_value['rotating_version']['values'] | to_nice_json(indent=2) }}"
 
   rescue:
     - name: Handle test failures
