@@ -75,7 +75,7 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
 #### HashiCorp Vault Secrets
 
 ```yaml
-- name: run through some tasks with HashiCorp Vault Secrets
+- name: run through some tasks with HashiCorp HCP Vault Secrets
   hosts: localhost
   vars:
     hcp_organisation_id: "my-organisation-id"
@@ -141,6 +141,39 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
 ```
 
 #### HCP Packer
+
+```yaml
+- name: run through some tasks with HashiCorp HCP Packer
+  hosts: localhost
+  vars:
+    hcp_organisation_id: "my-organisation-id"
+    hcp_project_id: "my-project-id"
+
+  tasks:
+  - name: Retrieve channel information
+    set_fact:
+      channel_info: "{{ lookup('benemon.hcp_community_collection.packer_channel', 
+                    'organization_id=' ~ hcp_organisation_id, 
+                    'project_id=' ~ hcp_project_id,
+                    'bucket_name=my-bucker-name',
+                    'channel_name=latest') }}"
+
+  - name: Show channel info
+    debug:
+      var: channel_info
+
+    - name: Retrieve version information
+      set_fact:
+        version_info: "{{ lookup('benemon.hcp_community_collection.packer_version', 
+                       'organization_id=' ~ hcp_organisation_id, 
+                       'project_id=' ~ hcp_project_id,
+                       'bucket_name=my-bucket-name',
+                       'fingerprint=abc123') }}"
+
+    - name: Show version info
+      debug:
+        var: version_info
+```
 
 ## Testing
 
