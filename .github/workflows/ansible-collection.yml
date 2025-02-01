@@ -35,6 +35,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install ansible
 
+      - name: Capture Versions
+        run: |
+          echo "Python Version:" > versions-${{ matrix.python-version }}.txt
+          python --version >> versions-${{ matrix.python-version }}.txt
+          echo "Ansible Version:" >> versions-${{ matrix.python-version }}.txt
+          ansible --version >> versions-${{ matrix.python-version }}.txt
+
       - name: Run unit tests
         run: |
           # Create directory structure and move files
@@ -58,8 +65,43 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.python-version }}
-          path: junit/*.xml
+          path: |
+            junit/*.xml
+            versions-${{ matrix.python-version }}.txt
           retention-days: 1
+
+  collect-versions:
+    name: Collect Version Information
+    needs: test
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Download Version Files
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          merge-multiple: true
+
+      - name: Combine Version Information
+        run: |
+          echo "# Test Matrix Versions" > combined_versions.md
+          echo "Last run: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> combined_versions.md
+          echo "" >> combined_versions.md
+          echo "## Python and Ansible Versions Tested" >> combined_versions.md
+          echo "" >> combined_versions.md
+          for file in versions-*.txt; do
+            echo "### Results for ${file#versions-}" >> combined_versions.md
+            cat "$file" >> combined_versions.md
+            echo "" >> combined_versions.md
+          done
+
+      - name: Upload Combined Versions
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-matrix
+          path: combined_versions.md
+          retention-days: 7
 
   publish-test-results:
     name: Publish Test Results
@@ -74,6 +116,7 @@ jobs:
       - name: Download Test Results
         uses: actions/download-artifact@v4
         with:
+          pattern: test-results-*
           path: junit
 
       - name: Publish Test Results
