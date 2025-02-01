@@ -118,14 +118,6 @@ jobs:
             cp "tests/output/junit/python${PYVER}-integration.xml" "${GITHUB_WORKSPACE}/junit/"
           fi
 
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: integration-test-results-${{ matrix.python-version }}
-          path: junit/*.xml
-          retention-days: 1
-
   collect-versions:
     name: Collect Version Information
     needs: [test, integration]
