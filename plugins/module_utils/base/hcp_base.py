@@ -107,7 +107,7 @@ class HCPLookupBase(LookupBase):
         
         return token_data['access_token']
 
-    def get_token_from_credentials(self, client_id, client_secret):
+    def _get_token_from_credentials(self, client_id, client_secret):
         """
         Obtain token from client credentials with backoff retry logic
         """
