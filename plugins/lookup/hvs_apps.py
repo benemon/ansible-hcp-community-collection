@@ -4,60 +4,95 @@ __metaclass__ = type
 DOCUMENTATION = r"""
     name: hvs_apps
     author: benemon
-    version_added: "1.0.0"
+    version_added: "0.0.1"
     short_description: List apps in HashiCorp Vault Secrets (HVS)
     description:
         - This lookup returns a list of apps from HashiCorp Vault Secrets (HVS)
         - Apps are organizational units within HVS that contain secrets
+        - Results can be filtered and paginated
     options:
         organization_id:
-            description: HCP Organization ID
-            required: True
+            description: 
+                - HCP Organization ID
+                - Required for all operations
+            required: true
             type: str
         project_id:
-            description: HCP Project ID
-            required: True
+            description: 
+                - HCP Project ID
+                - Required for all operations
+            required: true
             type: str
         hcp_token:
-            description: 
-                - HCP API token
-                - Can also be specified via HCP_TOKEN environment variable
-            required: False
+            description:
+                - HCP API token for authentication
+                - Can be specified via HCP_TOKEN environment variable
+                - Cannot be used together with client credentials (hcp_client_id/hcp_client_secret)
+            required: false
             type: str
+            env:
+                - name: HCP_TOKEN
         hcp_client_id:
             description:
                 - HCP Client ID for OAuth authentication
-                - Can also be specified via HCP_CLIENT_ID environment variable
-            required: False
+                - Can be specified via HCP_CLIENT_ID environment variable
+                - Must be used together with hcp_client_secret
+                - Cannot be used together with hcp_token
+            required: false
             type: str
+            env:
+                - name: HCP_CLIENT_ID
         hcp_client_secret:
             description:
                 - HCP Client Secret for OAuth authentication
-                - Can also be specified via HCP_CLIENT_SECRET environment variable
-            required: False
+                - Can be specified via HCP_CLIENT_SECRET environment variable
+                - Must be used together with hcp_client_id
+                - Cannot be used together with hcp_token
+            required: false
             type: str
-        disable_pagination:
-            description: If True, returns only the first page of results
-            required: False
-            type: bool
-            default: False
+            env:
+                - name: HCP_CLIENT_SECRET
         page_size:
-            description: Number of results per page
-            required: False
+            description: 
+                - Number of results to return per page
+                - Defaults to service-defined value if not specified
+                - Set to 0 to use service default
+            required: false
             type: int
         max_pages:
-            description: Maximum number of pages to retrieve
-            required: False
+            description:
+                - Maximum number of pages to retrieve
+                - Use with page_size to limit total results
+                - If not set, retrieves all available pages
+            required: false
             type: int
+        disable_pagination:
+            description: 
+                - If True, returns only the first page of results
+                - Overrides max_pages if set
+            required: false
+            type: bool
+            default: false
         name_contains:
-            description: Filter apps by name pattern
-            required: False
+            description: 
+                - Filter apps by partial name match
+                - Case-sensitive string comparison
+                - Returns empty list if no matches found
+            required: false
             type: str
     notes:
-        - Authentication can be provided either via token (hcp_token/HCP_TOKEN) or client credentials
-          (hcp_client_id + hcp_client_secret or HCP_CLIENT_ID + HCP_CLIENT_SECRET)
-        - Environment variables take precedence over playbook variables
-        - Returns all apps by default; use filters to limit results
+        - Authentication requires either an API token (hcp_token/HCP_TOKEN) or client credentials (hcp_client_id + hcp_client_secret)
+        - Authentication methods cannot be mixed - use either token or client credentials
+        - Environment variables take precedence over playbook parameters
+        - All timestamps are returned in RFC3339 format
+        - All responses are paginated by default with a default page size
+        - Results are returned as a list of dictionaries
+        - Empty results return an empty list rather than failing
+        - Filter parameters can be combined to narrow results
+    seealso:
+        - module: benemon.hcp_community_collection.hvs_secrets
+        - name: HVS API Documentation
+          link: https://developer.hashicorp.com/hcp/api-docs/vault-secrets
 """
 
 EXAMPLES = r"""
@@ -66,53 +101,49 @@ EXAMPLES = r"""
     HCP_TOKEN: "hvs.thisisafaketoken..."
   ansible.builtin.debug:
     msg: "{{ lookup('benemon.hcp_community_collection.hvs_apps', 
-             organization_id=org_id,
-             project_id=proj_id) }}"
+             'organization_id=org_id',
+             'project_id=proj_id') }}"
 
-# List apps with token authentication via playbook variable
+# List apps with OAuth client credentials
 - ansible.builtin.debug:
     msg: "{{ lookup('benemon.hcp_community_collection.hvs_apps',
-             organization_id=org_id,
-             project_id=proj_id,
-             hcp_token=my_token_var) }}"
+             'organization_id=org_id',
+             'project_id=proj_id',
+             'hcp_client_id=client_id',
+             'hcp_client_secret=client_secret') }}"
 
-# List apps using OAuth client credentials
+# Filter apps by name pattern with pagination
 - ansible.builtin.debug:
     msg: "{{ lookup('benemon.hcp_community_collection.hvs_apps',
-             organization_id=org_id,
-             project_id=proj_id,
-             hcp_client_id=client_id,
-             hcp_client_secret=client_secret) }}"
+             'organization_id=org_id',
+             'project_id=proj_id',
+             'name_contains=prod',
+             'page_size=10',
+             'max_pages=2') }}"
 
-# Filter apps by name pattern
-- ansible.builtin.debug:
-    msg: "{{ lookup('benemon.hcp_community_collection.hvs_apps',
-             organization_id=org_id,
-             project_id=proj_id,
-             name_contains='prod') }}"
-
-# Limit results with pagination
-- ansible.builtin.debug:
-    msg: "{{ lookup('benemon.hcp_community_collection.hvs_apps',
-             organization_id=org_id,
-             project_id=proj_id,
-             page_size=10,
-             max_pages=2) }}"
-
-# Store app information for later use
-- name: Get list of apps and store for later
+# Get all apps and handle empty results
+- name: Get apps with error handling
   ansible.builtin.set_fact:
     hvs_apps: "{{ lookup('benemon.hcp_community_collection.hvs_apps',
-                  organization_id=org_id,
-                  project_id=proj_id) }}"
+                  'organization_id=org_id',
+                  'project_id=proj_id') }}"
+  failed_when: false
 
-# Use with_items to iterate over apps
-- name: Print app names
+- name: Handle no apps found
   ansible.builtin.debug:
-    msg: "Found app: {{ item.name }}"
-  with_items: "{{ lookup('benemon.hcp_community_collection.hvs_apps',
-                  organization_id=org_id,
-                  project_id=proj_id) }}"
+    msg: "No apps found"
+  when: not hvs_apps
+
+# Use with_items to process apps safely
+- name: Process apps with error checking
+  ansible.builtin.debug:
+    msg: "Processing app: {{ item.name }} (created: {{ item.created_at }})"
+  loop: "{{ lookup('benemon.hcp_community_collection.hvs_apps',
+            'organization_id=org_id',
+            'project_id=proj_id') }}"
+  when: item.name is defined
+  loop_control:
+    label: "{{ item.name | default('unnamed app') }}"
 """
 
 RETURN = r"""
@@ -121,6 +152,14 @@ RETURN = r"""
     type: list
     elements: dict
     contains:
+      organization_id:
+        description: Organization ID the app belongs to
+        type: str
+        returned: always
+      project_id:
+        description: Project ID the app belongs to  
+        type: str
+        returned: always
       name:
         description: Name of the app
         type: str
@@ -129,61 +168,56 @@ RETURN = r"""
         description: Description of the app
         type: str
         returned: when set
-      organization_id:
-        description: Organization ID the app belongs to
-        type: str
-        returned: always
-      project_id:
-        description: Project ID the app belongs to
-        type: str
-        returned: always
+      sync_names:
+        description: List of sync names associated with the app
+        type: list
+        elements: str  
+        returned: when set
       created_at:
         description: Timestamp when the app was created
         type: str
+        format: date-time
         returned: always
       updated_at:
         description: Timestamp when the app was last updated
         type: str
-        returned: always
+        format: date-time
+        returned: always  
       created_by:
-        description: Information about who created the app
+        description: Principal who created the app
         type: dict
         returned: always
         contains:
           name:
-            description: Name of the creator
+            description: Name or identifier of the principal
             type: str
           type:
-            description: Type of principal who created the app
+            description: Type of principal
             type: str
           email:
-            description: Email of the creator
+            description: Email of the principal if applicable
             type: str
       updated_by:
-        description: Information about who last updated the app
+        description: Principal who last updated the app
         type: dict
         returned: always
         contains:
           name:
-            description: Name of the updater
+            description: Name or identifier of the principal
             type: str
           type:
-            description: Type of principal who updated the app
+            description: Type of principal
             type: str
           email:
-            description: Email of the updater
+            description: Email of the principal if applicable
             type: str
-      sync_names:
-        description: List of sync configurations associated with the app
-        type: list
-        elements: str
-        returned: when configured
       secret_count:
-        description: Number of secrets in the app
-        type: int
+        description: Total number of secrets in the app
+        type: integer
+        format: int32
         returned: always
       resource_name:
-        description: Full resource name of the app
+        description: Full resource name/path
         type: str
         returned: always
       resource_id:

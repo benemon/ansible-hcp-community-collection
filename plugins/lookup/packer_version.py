@@ -4,104 +4,178 @@ __metaclass__ = type
 DOCUMENTATION = r"""
     name: packer_version
     author: benemon
-    version_added: "1.0.0"
+    version_added: "0.0.3"
     short_description: Get version information from HCP Packer registry
     description:
-        - This lookup retrieves version information for a specific version in an HCP Packer registry bucket
-        - Returns details about the version including its status, builds, and metadata
+        - This lookup retrieves version information from an HCP Packer registry bucket
+        - Returns version metadata, build information, and artifact details
+        - Provides status information about the version
+        - Includes revocation status if applicable
+        - Supports region-specific queries
     options:
         organization_id:
-            description: HCP Organization ID
-            required: True
+            description: 
+                - HCP Organization ID
+                - Required for all operations
+            required: true
             type: str
         project_id:
-            description: HCP Project ID
-            required: True
+            description: 
+                - HCP Project ID
+                - Required for all operations
+            required: true
             type: str
         bucket_name:
-            description: Name of the Packer bucket
-            required: True
+            description:
+                - Name of the Packer registry bucket
+                - Must exist in the project
+                - Case-sensitive
+            required: true
             type: str
         fingerprint:
-            description: Fingerprint of the version to retrieve
-            required: True
+            description:
+                - Fingerprint of the version to retrieve
+                - Unique identifier set during packer build
+                - Must be a valid fingerprint in the specified bucket
+            required: true
             type: str
         hcp_token:
-            description: 
-                - HCP API token
-                - Can also be specified via HCP_TOKEN environment variable
-            required: False
+            description:
+                - HCP API token for authentication
+                - Can be specified via HCP_TOKEN environment variable
+                - Cannot be used together with client credentials (hcp_client_id/hcp_client_secret)
+            required: false
             type: str
+            env:
+                - name: HCP_TOKEN
         hcp_client_id:
             description:
                 - HCP Client ID for OAuth authentication
-                - Can also be specified via HCP_CLIENT_ID environment variable
-            required: False
+                - Can be specified via HCP_CLIENT_ID environment variable
+                - Must be used together with hcp_client_secret
+                - Cannot be used together with hcp_token
+            required: false
             type: str
+            env:
+                - name: HCP_CLIENT_ID
         hcp_client_secret:
             description:
                 - HCP Client Secret for OAuth authentication
-                - Can also be specified via HCP_CLIENT_SECRET environment variable
-            required: False
+                - Can be specified via HCP_CLIENT_SECRET environment variable
+                - Must be used together with hcp_client_id
+                - Cannot be used together with hcp_token
+            required: false
             type: str
+            env:
+                - name: HCP_CLIENT_SECRET
         location_region_provider:
-            description: Cloud provider for the region (e.g. "aws", "gcp", "azure")
-            required: False
+            description:
+                - Cloud provider for the region
+                - Examples - "aws", "gcp", "azure"
+                - Optional filter for region-specific results
+            required: false
             type: str
         location_region_region:
-            description: Cloud region (e.g. "us-west1", "us-east1")
-            required: False
+            description:
+                - Cloud region identifier
+                - Examples - "us-west1", "us-east1"
+                - Must be a valid region for the specified provider
+                - Only used if location_region_provider is specified
+            required: false
             type: str
     notes:
-        - Authentication can be provided either via token (hcp_token/HCP_TOKEN) or client credentials
-          (hcp_client_id + hcp_client_secret or HCP_CLIENT_ID + HCP_CLIENT_SECRET)
-        - Environment variables take precedence over playbook variables
+        - Authentication requires either an API token (hcp_token/HCP_TOKEN) or client credentials (hcp_client_id + hcp_client_secret)
+        - Authentication methods cannot be mixed - use either token or client credentials
+        - Environment variables take precedence over playbook parameters
+        - All timestamps are returned in RFC3339 format
+        - Version must exist in the specified bucket
+        - Region filters are optional but must be valid if specified
+        - Returns error if bucket or version does not exist
+        - Build information includes all artifacts and their metadata
+        - Revocation status and scheduling is included when applicable
+        - Template type (HCL2 or JSON) is included in response
+        - Metadata includes packer, cicd, and vcs information when available
+    seealso:
+        - module: benemon.hcp_community_collection.packer_channel
+        - name: HCP Packer Documentation
+          link: https://developer.hashicorp.com/packer/docs/hcp
 """
 
 EXAMPLES = r"""
-# Get version information using token authentication via environment variable
-- environment:
-    HCP_TOKEN: "hcp.thisisafaketoken..."
+# Get version information using token auth
+- name: Get version details
   ansible.builtin.debug:
-    msg: "{{ lookup('benemon.hcp_community_collection.packer_version', 
-             organization_id=org_id,
-             project_id=proj_id,
-             bucket_name='my-images',
-             fingerprint='abcd1234') }}"
-
-# Get version information with token authentication via playbook variable
-- ansible.builtin.debug:
     msg: "{{ lookup('benemon.hcp_community_collection.packer_version',
-             organization_id=org_id,
-             project_id=proj_id,
-             bucket_name='my-images',
-             fingerprint='abcd1234',
-             hcp_token=my_token_var) }}"
+             'organization_id=my-org-id',
+             'project_id=my-project-id',
+             'bucket_name=my-images',
+             'fingerprint=abcd1234') }}"
 
-# Get version from specific region
-- ansible.builtin.debug:
-    msg: "{{ lookup('benemon.hcp_community_collection.packer_version',
-             organization_id=org_id,
-             project_id=proj_id,
-             bucket_name='my-images',
-             fingerprint='abcd1234',
-             location_region_provider='aws',
-             location_region_region='us-west-1') }}"
+# Get version from specific region with error handling
+- name: Get version with validation
+  block:
+    - name: Retrieve version
+      set_fact:
+        version_info: "{{ lookup('benemon.hcp_community_collection.packer_version',
+                         'organization_id=my-org-id',
+                         'project_id=my-project-id',
+                         'bucket_name=my-images',
+                         'fingerprint=abcd1234',
+                         'location_region_provider=aws',
+                         'location_region_region=us-west-1') }}"
+    - name: Check version status
+      assert:
+        that: version_info.status == "VERSION_ACTIVE"
+        fail_msg: "Version is not active"
+    - name: Verify no revocation
+      assert:
+        that: version_info.revoke_at is not defined
+        fail_msg: "Version is scheduled for revocation"
+  rescue:
+    - name: Handle lookup failure
+      debug:
+        msg: "Failed to retrieve version information or validation failed"
 
-# Store version information for later use
-- name: Get version details and store for later
-  ansible.builtin.set_fact:
-    version_info: "{{ lookup('benemon.hcp_community_collection.packer_version',
-                     organization_id=org_id,
-                     project_id=proj_id,
-                     bucket_name='my-images',
-                     fingerprint='abcd1234') }}"
+# Process build artifacts
+- name: Get AWS AMI IDs
+  ansible.builtin.debug:
+    msg: "AMI {{ item.external_identifier }} in region {{ item.region }}"
+  vars:
+    version: "{{ lookup('benemon.hcp_community_collection.packer_version',
+                 'organization_id=my-org-id',
+                 'project_id=my-project-id',
+                 'bucket_name=my-images',
+                 'fingerprint=abcd1234') }}"
+  loop: "{{ version.builds | 
+            selectattr('platform', 'equalto', 'aws') | 
+            map(attribute='artifacts') | 
+            flatten }}"
+  when: version.builds is defined
+  loop_control:
+    label: "{{ item.region }}"
+
+# Check build metadata
+- name: Display build information
+  ansible.builtin.debug:
+    msg: 
+      - "Built with Packer: {{ item.metadata.packer | default('unknown') }}"
+      - "CI/CD: {{ item.metadata.cicd | default('unknown') }}"
+      - "VCS: {{ item.metadata.vcs | default('unknown') }}"
+  loop: "{{ lookup('benemon.hcp_community_collection.packer_version',
+            'organization_id=my-org-id',
+            'project_id=my-project-id',
+            'bucket_name=my-images',
+            'fingerprint=abcd1234').builds }}"
+  when: item.metadata is defined
+  loop_control:
+    label: "Build {{ item.id }}"
 """
 
 RETURN = r"""
-  _raw:
+  _list:
     description: Version information from HCP Packer
-    type: dict
+    type: list
+    elements: dict
     contains:
       id:
         description: Unique identifier (ULID)
@@ -116,67 +190,141 @@ RETURN = r"""
         type: str
         returned: always
       status:
-        description: Current state of the version (e.g., VERSION_ACTIVE)
+        description: Current state of the version (VERSION_UNSET, VERSION_RUNNING, VERSION_CANCELLED, VERSION_FAILED, VERSION_REVOKED, VERSION_REVOCATION_SCHEDULED, VERSION_ACTIVE, VERSION_INCOMPLETE)
         type: str
         returned: always
-      fingerprint:
-        description: Fingerprint of the version set by Packer
+      author_id:
+        description: Author's ID who created this version
         type: str
         returned: always
       created_at:
         description: Creation timestamp
         type: str
+        format: date-time
         returned: always
       updated_at:
         description: Last update timestamp
+        type: str
+        format: date-time
+        returned: always
+      fingerprint:
+        description: Fingerprint of the version set by Packer
         type: str
         returned: always
       builds:
         description: List of builds associated with this version
         type: list
+        elements: dict
         returned: always
         contains:
           id:
-            description: Build identifier
+            description: Unique identifier (ULID)
             type: str
           version_id:
-            description: Version identifier
+            description: ID of the version this build belongs to
             type: str
           component_type:
-            description: Type of builder or post-processor
+            description: Internal Packer name for the builder or post-processor component
             type: str
-          status:
-            description: Build status
+          packer_run_uuid:
+            description: UUID specific to this Packer build run
             type: str
           artifacts:
             description: List of artifacts created by this build
             type: list
+            elements: dict
             contains:
               id:
-                description: Artifact identifier
+                description: Unique identifier (ULID)
                 type: str
               external_identifier:
-                description: External resource identifier (e.g. AMI ID)
+                description: ID or URL of the remote artifact
                 type: str
               region:
-                description: Region where artifact exists
+                description: External region as provided by Packer build
                 type: str
+              created_at:
+                description: Creation timestamp
+                type: str
+                format: date-time
+          platform:
+            description: Platform that this build produced artifacts for
+            type: str
+          status:
+            description: Current state of the build
+            type: str
+          created_at:
+            description: Creation timestamp
+            type: str
+            format: date-time
+          updated_at:
+            description: Last update timestamp
+            type: str
+            format: date-time
+          source_external_identifier:
+            description: ID or URL of the remote cloud source artifact
+            type: str
+          labels:
+            description: Key:value map for custom metadata about the build
+            type: dict
+          metadata:
+            description: Build process information set by Packer
+            type: dict
+            contains:
+              packer:
+                description: Information about Packer version, plugins, and OS
+                type: dict
+              cicd:
+                description: Information about the CICD pipeline
+                type: dict
+              vcs:
+                description: Information about the version control system
+                type: dict
       has_descendants:
         description: Whether this version has child versions
         type: bool
         returned: always
       template_type:
-        description: Type of Packer template used (HCL2 or JSON)
+        description: Type of Packer configuration template used (TEMPLATE_TYPE_UNSET, HCL2, JSON)
         type: str
-        returned: when set
+        returned: always
       revoke_at:
-        description: Scheduled revocation timestamp
+        description: When this version is scheduled to be revoked
         type: str
+        format: date-time
         returned: when set
       revocation_message:
-        description: Explanation for revocation
+        description: Reason for revocation
         type: str
-        returned: when set
+        returned: when revoked
+      revocation_author:
+        description: Who revoked this version
+        type: str
+        returned: when revoked
+      revocation_type:
+        description: Type of revocation (MANUAL or INHERITED)
+        type: str
+        returned: when revoked
+      revocation_inherited_from:
+        description: Ancestor version from whom this version inherited the revocation
+        type: dict
+        returned: when revocation inherited
+        contains:
+          href:
+            description: URL to get the revoked ancestor
+            type: str
+          bucket_name:
+            description: The revoked ancestor bucket name
+            type: str
+          version_name:
+            description: The revoked ancestor version name
+            type: str
+          version_id:
+            description: The revoked ancestor version ULID
+            type: str
+          version_fingerprint:
+            description: The revoked ancestor version fingerprint
+            type: str
 """
 
 from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.base.hcp_base import HCPLookupBase
