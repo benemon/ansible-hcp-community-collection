@@ -108,15 +108,18 @@ class HCPLookupBase(LookupBase):
         return token_data['access_token']
 
     def _get_token_from_credentials(self, client_id, client_secret):
-        """
-        Obtain token from client credentials with backoff retry logic
-        """
-        url = f"{self.base_url}/oauth/token"
+        """Get HCP authentication token using client credentials OAuth2 flow with backoff."""
+        auth_url = "https://auth.idp.hashicorp.com/oauth2/token"
+        
         data = {
-            'grant_type': 'client_credentials',
-            'audience': 'https://api.hashicorp.cloud',
             'client_id': client_id,
-            'client_secret': client_secret
+            'client_secret': client_secret,
+            'grant_type': 'client_credentials',
+            'audience': 'https://api.hashicorp.cloud'
+        }
+        
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded'
         }
 
         max_retries = 5  # Maximum number of retry attempts
@@ -125,7 +128,9 @@ class HCPLookupBase(LookupBase):
 
         for attempt in range(max_retries):
             try:
-                response = requests.post(url, json=data)
+                display.vvv(f"Attempting to get token from {auth_url}")
+                response = requests.post(auth_url, data=data, headers=headers)
+                display.vvv(f"Auth response status code: {response.status_code}")
                 
                 if response.status_code == 429:  # Rate limit exceeded
                     if attempt == max_retries - 1:
@@ -137,23 +142,18 @@ class HCPLookupBase(LookupBase):
                     time.sleep(delay)
                     continue
 
-                response.raise_for_status()
+                if response.status_code != 200:
+                    display.vvv(f"Auth error response: {response.text}")
+                    response.raise_for_status()
                 
                 json_response = response.json()
                 display.vvv("Successfully obtained auth token")
-                
-                if not all(k in json_response for k in ['access_token', 'expires_in']):
-                    display.vvv(f"Unexpected response format. Keys: {list(json_response.keys())}")
-                    raise KeyError('Missing required fields in response')
-                
                 return json_response
                 
             except requests.exceptions.RequestException as e:
                 if attempt == max_retries - 1:
                     raise AnsibleError(f'Failed to obtain token from client credentials: {str(e)}')
                 continue
-            except KeyError as e:
-                raise AnsibleError(f'Unexpected response format from auth endpoint: {str(e)}')
             except Exception as e:
                 raise AnsibleError(f'Unexpected error while obtaining token: {str(e)}')
 
