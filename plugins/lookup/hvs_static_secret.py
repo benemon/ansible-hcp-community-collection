@@ -4,101 +4,151 @@ __metaclass__ = type
 DOCUMENTATION = r"""
     name: hvs_static_secret
     author: benemon
-    version_added: "1.0.0"
+    version_added: "0.0.1"
     short_description: Retrieve a static secret value from HashiCorp Vault Secrets (HVS)
     description:
         - This lookup retrieves a static secret value from HashiCorp Vault Secrets (HVS)
-        - Uses the :open endpoint to get the decrypted secret value
+        - Returns the decrypted secret value and metadata
         - Static secrets are simple key-value pairs that don't rotate or expire
+        - Can retrieve specific versions if required
         - For dynamic or rotating secrets, use their dedicated lookup plugins
     options:
         organization_id:
-            description: HCP Organization ID
-            required: True
+            description: 
+                - HCP Organization ID
+                - Required for all operations
+            required: true
             type: str
         project_id:
-            description: HCP Project ID
-            required: True
+            description: 
+                - HCP Project ID
+                - Required for all operations
+            required: true
             type: str
         app_name:
-            description: Name of the app containing the secret
-            required: True
+            description: 
+                - Name of the app containing the secret
+                - Must exist in the project
+            required: true
             type: str
         secret_name:
-            description: Name of the secret to retrieve
-            required: True
+            description: 
+                - Name of the secret to retrieve
+                - Must be a static secret (type 'kv')
+            required: true
             type: str
         version:
             description: 
-                - Specific version of the secret to retrieve
-                - If not specified, retrieves the latest version
-            required: False
+                - Specific version number to retrieve
+                - Must be a valid version number that exists
+                - If not specified, returns the latest version
+                - Cannot retrieve deleted versions
+            required: false
             type: int
         hcp_token:
-            description: 
-                - HCP API token
-                - Can also be specified via HCP_TOKEN environment variable
-            required: False
+            description:
+                - HCP API token for authentication
+                - Can be specified via HCP_TOKEN environment variable
+                - Cannot be used together with client credentials (hcp_client_id/hcp_client_secret)
+            required: false
             type: str
+            env:
+                - name: HCP_TOKEN
         hcp_client_id:
             description:
                 - HCP Client ID for OAuth authentication
-                - Can also be specified via HCP_CLIENT_ID environment variable
-            required: False
+                - Can be specified via HCP_CLIENT_ID environment variable
+                - Must be used together with hcp_client_secret
+                - Cannot be used together with hcp_token
+            required: false
             type: str
+            env:
+                - name: HCP_CLIENT_ID
         hcp_client_secret:
             description:
                 - HCP Client Secret for OAuth authentication
-                - Can also be specified via HCP_CLIENT_SECRET environment variable
-            required: False
+                - Can be specified via HCP_CLIENT_SECRET environment variable
+                - Must be used together with hcp_client_id
+                - Cannot be used together with hcp_token
+            required: false
             type: str
-
+            env:
+                - name: HCP_CLIENT_SECRET
     notes:
-        - Authentication can be provided either via token (hcp_token/HCP_TOKEN) or client credentials
-          (hcp_client_id + hcp_client_secret or HCP_CLIENT_ID + HCP_CLIENT_SECRET)
-        - Environment variables take precedence over playbook variables
-        - For non-static secrets, use hvs_dynamic_secret or hvs_rotating_secret plugins
+        - Authentication requires either an API token (hcp_token/HCP_TOKEN) or client credentials (hcp_client_id + hcp_client_secret)
+        - Authentication methods cannot be mixed - use either token or client credentials
+        - Environment variables take precedence over playbook parameters
+        - All timestamps are returned in RFC3339 format
+        - Secret must already exist and be of type 'kv'
+        - Returns error if secret type does not match
+        - Version numbers start at 1 and increment
+        - Attempting to retrieve a non-existent version will fail
+        - Static secrets do not expire or automatically rotate
+    seealso:
+        - module: benemon.hcp_community_collection.hvs_dynamic_secret
+        - module: benemon.hcp_community_collection.hvs_rotating_secret
+        - name: HVS API Documentation
+          link: https://developer.hashicorp.com/hcp/api-docs/vault-secrets
 """
 
 EXAMPLES = r"""
-# Retrieve latest version of a static secret (just the value)
-- ansible.builtin.debug:
-    msg: "{{ lookup('benemon.hcp_community_collection.hvs_static_secret', 
-             organization_id=org_id,
-             project_id=proj_id,
-             app_name='my-app',
-             secret_name='database_password') }}"
-
-# Retrieve a specific version with metadata
-- ansible.builtin.debug:
+# Get latest version of a static secret using token auth
+- name: Get API key
+  ansible.builtin.debug:
     msg: "{{ lookup('benemon.hcp_community_collection.hvs_static_secret',
-             organization_id=org_id,
-             project_id=proj_id,
-             app_name='my-app',
-             secret_name='api_key',
-             version=2,
-             return_metadata=True) }}"
+             'organization_id=my-org-id',
+             'project_id=my-project-id',
+             'app_name=api-app',
+             'secret_name=api-key') }}"
 
-# Use a retrieved secret in a configuration
-- name: Configure application with secret
+# Get specific version of a static secret
+- name: Get previous password version
+  ansible.builtin.debug:
+    msg: "{{ lookup('benemon.hcp_community_collection.hvs_static_secret',
+             'organization_id=my-org-id',
+             'project_id=my-project-id',
+             'app_name=my-app',
+             'secret_name=db-password',
+             'version=2') }}"
+
+# Get static secret with error handling
+- name: Get secret with validation
+  block:
+    - name: Retrieve secret
+      set_fact:
+        config_secret: "{{ lookup('benemon.hcp_community_collection.hvs_static_secret',
+                          'organization_id=my-org-id',
+                          'project_id=my-project-id',
+                          'app_name=config-app',
+                          'secret_name=app-config') }}"
+    - name: Verify secret has value
+      assert:
+        that:
+          - config_secret.static_version is defined
+          - config_secret.static_version.value is defined
+          - config_secret.static_version.value | length > 0
+        fail_msg: "Retrieved secret has no value"
+  rescue:
+    - name: Handle lookup failure
+      debug:
+        msg: "Failed to retrieve static secret or invalid data received"
+
+# Use static secret in configuration with validation
+- name: Configure application
   ansible.builtin.template:
-    src: app-config.j2
+    src: config.j2
     dest: /etc/myapp/config.yml
+    mode: '0600'
   vars:
-    api_key: "{{ lookup('benemon.hcp_community_collection.hvs_static_secret',
-                 organization_id=org_id,
-                 project_id=proj_id,
-                 app_name='my-app',
-                 secret_name='api_key') }}"
-
-# Store secret for later use
-- name: Get secret and store for later
-  ansible.builtin.set_fact:
-    db_password: "{{ lookup('benemon.hcp_community_collection.hvs_static_secret',
-                    organization_id=org_id,
-                    project_id=proj_id,
-                    app_name='my-app',
-                    secret_name='db_password') }}"
+    secret: "{{ lookup('benemon.hcp_community_collection.hvs_static_secret',
+                'organization_id=my-org-id',
+                'project_id=my-project-id',
+                'app_name=my-app',
+                'secret_name=app-secret') }}"
+  when: 
+    - secret.static_version is defined 
+    - secret.static_version.value is defined
+    - secret.static_version.value | length > 0
 """
 
 RETURN = r"""
@@ -107,8 +157,49 @@ RETURN = r"""
     type: list
     elements: dict
     contains:
+      name:
+        description: Name of the secret
+        type: str
+        returned: always
+      type:
+        description: Type of secret (will be 'kv')
+        type: str
+        returned: always
+      provider:
+        description: Provider for this static secret
+        type: str
+        returned: when applicable
+      latest_version:
+        description: Latest version number
+        type: int
+        format: int64
+        returned: always
+      created_at:
+        description: Creation timestamp
+        type: str
+        format: date-time
+        returned: always
+      created_by_id:
+        description: ID of the principal who created the secret
+        type: str
+        returned: always
+      sync_status:
+        description: Status of any syncs for this secret
+        type: dict
+        returned: when syncs configured
+        contains:
+          status:
+            description: Current sync status
+            type: str
+          updated_at:
+            description: Last sync update timestamp
+            type: str
+            format: date-time
+          last_error_code:
+            description: Error code from last sync attempt if any
+            type: str
       static_version:
-        description: Static secret data
+        description: Static secret version data
         type: dict
         returned: always
         contains:
@@ -118,8 +209,13 @@ RETURN = r"""
           version:
             description: Version number
             type: int
+            format: int64
           created_at:
-            description: Creation timestamp
+            description: When this version was created
+            type: str
+            format: date-time
+          created_by_id:
+            description: ID of the principal who created this version
             type: str
 """
 

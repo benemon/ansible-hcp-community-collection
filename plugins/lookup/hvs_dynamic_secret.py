@@ -4,7 +4,7 @@ __metaclass__ = type
 DOCUMENTATION = r"""
     name: hvs_dynamic_secret
     author: benemon
-    version_added: "1.0.0"
+    version_added: "0.0.1"
     short_description: Retrieve a dynamic secret value from HashiCorp Vault Secrets (HVS)
     description:
         - This lookup retrieves a dynamic secret value from HashiCorp Vault Secrets (HVS)
@@ -13,87 +13,198 @@ DOCUMENTATION = r"""
         - For static or rotating secrets, use their dedicated lookup plugins
     options:
         organization_id:
-            description: HCP Organization ID
+            description: 
+                - HCP Organization ID
+                - Required for all operations
             required: true
             type: str
         project_id:
-            description: HCP Project ID
+            description: 
+                - HCP Project ID
+                - Required for all operations
             required: true
             type: str
         app_name:
-            description: Name of the app containing the secret
+            description: 
+                - Name of the app containing the secret
+                - Must exist in the project
             required: true
             type: str
         secret_name:
-            description: Name of the secret to retrieve
+            description: 
+                - Name of the secret to retrieve
+                - Must be a dynamic secret
             required: true
             type: str
         ttl:
-            description: Override the default TTL for this request
+            description: 
+                - Override the default TTL for this request
+                - Format: duration string (e.g. "1h", "30m", "24h")
+                - If not specified, uses the secret's default TTL
             required: false
             type: str
         hcp_token:
-            description: HCP API token
+            description:
+                - HCP API token for authentication
+                - Can be specified via HCP_TOKEN environment variable
+                - Cannot be used together with client credentials (hcp_client_id/hcp_client_secret)
             required: false
             type: str
             env:
                 - name: HCP_TOKEN
         hcp_client_id:
-            description: HCP Client ID for OAuth authentication
+            description:
+                - HCP Client ID for OAuth authentication
+                - Can be specified via HCP_CLIENT_ID environment variable
+                - Must be used together with hcp_client_secret
+                - Cannot be used together with hcp_token
             required: false
             type: str
             env:
                 - name: HCP_CLIENT_ID
         hcp_client_secret:
-            description: HCP Client Secret for OAuth authentication
+            description:
+                - HCP Client Secret for OAuth authentication
+                - Can be specified via HCP_CLIENT_SECRET environment variable
+                - Must be used together with hcp_client_id
+                - Cannot be used together with hcp_token
             required: false
             type: str
             env:
                 - name: HCP_CLIENT_SECRET
+    notes:
+        - Authentication requires either an API token (hcp_token/HCP_TOKEN) or client credentials (hcp_client_id + hcp_client_secret)
+        - Authentication methods cannot be mixed - use either token or client credentials
+        - Environment variables take precedence over playbook parameters
+        - All timestamps are returned in RFC3339 format
+        - Dynamic secrets are generated for each request
+        - TTL values must be valid duration strings
+        - Secret must already exist and be of type 'dynamic'
+        - Returns error if secret type does not match
+        - Values expire after TTL period
+    seealso:
+        - module: benemon.hcp_community_collection.hvs_static_secret
+        - module: benemon.hcp_community_collection.hvs_rotating_secret
+        - name: HVS API Documentation
+          link: https://developer.hashicorp.com/hcp/api-docs/vault-secrets
 """
 
 EXAMPLES = r"""
-# Get a dynamic secret with default TTL
-- name: Get dynamic AWS credentials
-  debug:
+# Get a dynamic secret with default TTL using token auth
+- name: Get AWS credentials
+  ansible.builtin.debug:
     msg: "{{ lookup('benemon.hcp_community_collection.hvs_dynamic_secret',
              'organization_id=my-org-id',
              'project_id=my-project-id',
-             'app_name=my-app',
-             'secret_name=aws-creds') }}"
+             'app_name=aws-app',
+             'secret_name=temporary-creds') }}"
 
 # Get a dynamic secret with custom TTL
-- name: Get dynamic database credentials
-  debug:
+- name: Get database credentials with 2 hour TTL
+  ansible.builtin.debug:
     msg: "{{ lookup('benemon.hcp_community_collection.hvs_dynamic_secret',
              'organization_id=my-org-id',
              'project_id=my-project-id',
-             'app_name=my-app',
-             'secret_name=db-creds',
+             'app_name=db-app',
+             'secret_name=temp-db-user',
              'ttl=2h') }}"
+
+# Get dynamic secret with OAuth credentials and handle errors
+- name: Get dynamic secret with error handling
+  block:
+    - name: Retrieve secret
+      set_fact:
+        db_creds: "{{ lookup('benemon.hcp_community_collection.hvs_dynamic_secret',
+                      'organization_id=my-org-id',
+                      'project_id=my-project-id',
+                      'app_name=db-app',
+                      'secret_name=temp-access',
+                      'hcp_client_id=client_id',
+                      'hcp_client_secret=client_secret') }}"
+  rescue:
+    - name: Handle lookup failure
+      debug:
+        msg: "Failed to retrieve dynamic secret"
+
+# Use dynamic secret in configuration
+- name: Configure application with temporary credentials
+  ansible.builtin.template:
+    src: config.j2
+    dest: /etc/myapp/config.yml
+    mode: '0600'
+  vars:
+    credentials: "{{ lookup('benemon.hcp_community_collection.hvs_dynamic_secret',
+                    'organization_id=my-org-id',
+                    'project_id=my-project-id',
+                    'app_name=service-app',
+                    'secret_name=api-creds') }}"
 """
 
 RETURN = r"""
-_raw:
-    description: dictionary containing the dynamic secret data
-    type: dict
+  _list:
+    description: Complete dynamic secret data as returned by the HVS API
+    type: list
+    elements: dict
     contains:
-        dynamic_instance:
-            description: Dynamic secret instance data
+      name:
+        description: Name of the secret
+        type: str
+        returned: always
+      type:
+        description: Type of secret (will be 'dynamic')
+        type: str
+        returned: always
+      provider:
+        description: Provider for this dynamic secret
+        type: str
+        returned: always
+      created_at:
+        description: Creation timestamp
+        type: str
+        format: date-time
+        returned: always
+      created_by_id:
+        description: ID of the principal who created the secret
+        type: str
+        returned: always
+      sync_status:
+        description: Status of any syncs for this secret
+        type: dict
+        returned: when syncs configured
+        contains:
+          status:
+            description: Current sync status
+            type: str
+          updated_at:
+            description: Last sync update timestamp
+            type: str
+            format: date-time
+          last_error_code:
+            description: Error code from last sync attempt if any
+            type: str
+      dynamic_instance:
+        description: The dynamic secret instance data
+        type: dict
+        returned: always
+        contains:
+          values:
+            description: Map of secret values
             type: dict
-            contains:
-                values:
-                    description: The secret values
-                    type: dict
-                created_at:
-                    description: Creation timestamp
-                    type: str
-                expires_at:
-                    description: Expiration timestamp
-                    type: str
-                ttl:
-                    description: Time-to-live duration
-                    type: str
+            returned: always
+          created_at:
+            description: When this instance was created
+            type: str
+            format: date-time
+            returned: always
+          expires_at:
+            description: When this instance expires
+            type: str
+            format: date-time
+            returned: always
+          ttl:
+            description: Time-to-live duration for this instance
+            type: str
+            returned: always
 """
 
 from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.base.hcp_base import HCPLookupBase

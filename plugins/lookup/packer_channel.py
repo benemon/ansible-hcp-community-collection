@@ -4,104 +4,163 @@ __metaclass__ = type
 DOCUMENTATION = r"""
     name: packer_channel
     author: benemon
-    version_added: "1.0.0"
+    version_added: "0.0.3"
     short_description: Get channel information from HCP Packer registry
     description:
         - This lookup retrieves information about a channel in an HCP Packer registry bucket
-        - Returns details about the channel and its currently assigned version if any
+        - Returns channel metadata and current version assignment if any
+        - Channels provide a way to track specific versions of Packer builds
+        - Supports region-specific queries
+        - Returns error if channel or bucket does not exist
     options:
         organization_id:
-            description: HCP Organization ID
-            required: True
+            description: 
+                - HCP Organization ID
+                - Required for all operations
+            required: true
             type: str
         project_id:
-            description: HCP Project ID
-            required: True
+            description: 
+                - HCP Project ID
+                - Required for all operations
+            required: true
             type: str
         bucket_name:
-            description: Name of the Packer bucket
-            required: True
+            description:
+                - Name of the Packer registry bucket
+                - Must exist in the project
+                - Case-sensitive
+            required: true
             type: str
         channel_name:
-            description: Name of the channel to retrieve
-            required: True
+            description:
+                - Name of the channel to retrieve
+                - Must exist in the specified bucket
+                - Case-sensitive
+            required: true
             type: str
         hcp_token:
-            description: 
-                - HCP API token
-                - Can also be specified via HCP_TOKEN environment variable
-            required: False
+            description:
+                - HCP API token for authentication
+                - Can be specified via HCP_TOKEN environment variable
+                - Cannot be used together with client credentials (hcp_client_id/hcp_client_secret)
+            required: false
             type: str
+            env:
+                - name: HCP_TOKEN
         hcp_client_id:
             description:
                 - HCP Client ID for OAuth authentication
-                - Can also be specified via HCP_CLIENT_ID environment variable
-            required: False
+                - Can be specified via HCP_CLIENT_ID environment variable
+                - Must be used together with hcp_client_secret
+                - Cannot be used together with hcp_token
+            required: false
             type: str
+            env:
+                - name: HCP_CLIENT_ID
         hcp_client_secret:
             description:
                 - HCP Client Secret for OAuth authentication
-                - Can also be specified via HCP_CLIENT_SECRET environment variable
-            required: False
+                - Can be specified via HCP_CLIENT_SECRET environment variable
+                - Must be used together with hcp_client_id
+                - Cannot be used together with hcp_token
+            required: false
             type: str
+            env:
+                - name: HCP_CLIENT_SECRET
         location_region_provider:
-            description: Cloud provider for the region (e.g. "aws", "gcp", "azure")
-            required: False
+            description:
+                - Cloud provider for the region
+                - Examples - "aws", "gcp", "azure"
+                - Optional filter for region-specific results
+            required: false
             type: str
         location_region_region:
-            description: Cloud region (e.g. "us-west1", "us-east1")
-            required: False
+            description:
+                - Cloud region identifier
+                - Examples - "us-west1", "us-east1"
+                - Must be a valid region for the specified provider
+                - Only used if location_region_provider is specified
+            required: false
             type: str
     notes:
-        - Authentication can be provided either via token (hcp_token/HCP_TOKEN) or client credentials
-          (hcp_client_id + hcp_client_secret or HCP_CLIENT_ID + HCP_CLIENT_SECRET)
-        - Environment variables take precedence over playbook variables
+        - Authentication requires either an API token (hcp_token/HCP_TOKEN) or client credentials (hcp_client_id + hcp_client_secret)
+        - Authentication methods cannot be mixed - use either token or client credentials
+        - Environment variables take precedence over playbook parameters
+        - All timestamps are returned in RFC3339 format
+        - Channel must exist in the specified bucket
+        - Region filters are optional but must be valid if specified
+        - Returns error if bucket or channel does not exist
+        - Managed channels (like 'latest') have special behavior
+        - Restricted channels may have limited access
+    seealso:
+        - module: benemon.hcp_community_collection.packer_version
+        - name: HCP Packer Documentation
+          link: https://developer.hashicorp.com/packer/docs/hcp
 """
 
 EXAMPLES = r"""
-# Get channel information using token authentication via environment variable
-- environment:
-    HCP_TOKEN: "hcp.thisisafaketoken..."
+# Get channel information using token auth
+- name: Get production channel info
   ansible.builtin.debug:
-    msg: "{{ lookup('benemon.hcp_community_collection.packer_channel', 
-             organization_id=org_id,
-             project_id=proj_id,
-             bucket_name='my-images',
-             channel_name='production') }}"
-
-# Get channel information with token authentication via playbook variable
-- ansible.builtin.debug:
     msg: "{{ lookup('benemon.hcp_community_collection.packer_channel',
-             organization_id=org_id,
-             project_id=proj_id,
-             bucket_name='my-images',
-             channel_name='production',
-             hcp_token=my_token_var) }}"
+             'organization_id=my-org-id',
+             'project_id=my-project-id',
+             'bucket_name=my-images',
+             'channel_name=production') }}"
 
 # Get channel from specific region
-- ansible.builtin.debug:
+- name: Get channel in AWS us-west-1
+  ansible.builtin.debug:
     msg: "{{ lookup('benemon.hcp_community_collection.packer_channel',
-             organization_id=org_id,
-             project_id=proj_id,
-             bucket_name='my-images',
-             channel_name='production',
-             location_region_provider='aws',
-             location_region_region='us-west-1') }}"
+             'organization_id=my-org-id',
+             'project_id=my-project-id',
+             'bucket_name=my-images',
+             'channel_name=production',
+             'location_region_provider=aws',
+             'location_region_region=us-west-1') }}"
 
-# Store channel information for later use
-- name: Get channel details and store for later
-  ansible.builtin.set_fact:
-    channel_info: "{{ lookup('benemon.hcp_community_collection.packer_channel',
-                     organization_id=org_id,
-                     project_id=proj_id,
-                     bucket_name='my-images',
-                     channel_name='production') }}"
+# Get channel info with error handling
+- name: Get channel with validation
+  block:
+    - name: Retrieve channel
+      set_fact:
+        channel_info: "{{ lookup('benemon.hcp_community_collection.packer_channel',
+                         'organization_id=my-org-id',
+                         'project_id=my-project-id',
+                         'bucket_name=my-images',
+                         'channel_name=staging') }}"
+    - name: Check if version is assigned
+      debug:
+        msg: "Channel has version {{ channel_info.version.fingerprint }} assigned"
+      when: channel_info.version is defined
+  rescue:
+    - name: Handle lookup failure
+      debug:
+        msg: "Failed to retrieve channel information"
+
+# Use channel info for configuration
+- name: Configure with channel version
+  ansible.builtin.template:
+    src: config.j2
+    dest: /etc/myapp/image-config.yml
+    mode: '0644'
+  vars:
+    channel: "{{ lookup('benemon.hcp_community_collection.packer_channel',
+                 'organization_id=my-org-id',
+                 'project_id=my-project-id',
+                 'bucket_name=my-images',
+                 'channel_name=production') }}"
+  when: 
+    - channel.version is defined
+    - channel.version.fingerprint is defined
 """
 
 RETURN = r"""
-  _raw:
+  _list:
     description: Channel information from HCP Packer
-    type: dict
+    type: list
+    elements: dict
     contains:
       id:
         description: Unique identifier (ULID)
@@ -115,39 +174,44 @@ RETURN = r"""
         description: Name of the bucket this channel belongs to
         type: str
         returned: always
+      author_id:
+        description: User who last updated the channel
+        type: str
+        returned: always
       created_at:
         description: Creation timestamp
         type: str
+        format: date-time
         returned: always
       updated_at:
         description: Last update timestamp
         type: str
+        format: date-time
         returned: always
       version:
-        description: Information about the currently assigned version
+        description: Currently assigned version information
         type: dict
         returned: when version is assigned
         contains:
           id:
-            description: Version ID
+            description: Version ULID
             type: str
+            returned: always
           name:
             description: Version name
             type: str
+            returned: always
           fingerprint:
-            description: Version fingerprint
+            description: Version build fingerprint
             type: str
+            returned: always
       managed:
-        description: Whether the channel is managed by HCP Packer
+        description: Whether this channel is managed by HCP Packer (such as the latest channel)
         type: bool
         returned: always
       restricted:
-        description: Whether access to the channel is restricted
+        description: Whether this channel's access is restricted to users with write permission
         type: bool
-        returned: always
-      author_id:
-        description: ID of user who last updated the channel
-        type: str
         returned: always
 """
 

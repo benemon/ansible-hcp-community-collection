@@ -4,79 +4,147 @@ __metaclass__ = type
 DOCUMENTATION = r"""
     name: hvs_rotating_secret
     author: benemon
-    version_added: "1.0.0"
+    version_added: "0.0.1"
     short_description: Retrieve a rotating secret value from HashiCorp Vault Secrets (HVS)
     description:
         - This lookup retrieves a rotating secret value from HashiCorp Vault Secrets (HVS)
-        - Uses the :open endpoint to get the decrypted secret value
-        - Rotating secrets are automatically rotated on a schedule and maintain previous versions
+        - Returns the decrypted secret value and metadata
+        - Rotating secrets automatically rotate on a schedule and maintain previous versions
         - For static or dynamic secrets, use their dedicated lookup plugins
+        - Returns latest valid version by default
     options:
         organization_id:
-            description: HCP Organization ID
-            required: True
+            description: 
+                - HCP Organization ID
+                - Required for all operations
+            required: true
             type: str
         project_id:
-            description: HCP Project ID
-            required: True
+            description: 
+                - HCP Project ID
+                - Required for all operations
+            required: true
             type: str
         app_name:
-            description: Name of the app containing the secret
-            required: True
+            description: 
+                - Name of the app containing the secret
+                - Must exist in the project
+            required: true
             type: str
         secret_name:
-            description: Name of the secret to retrieve
-            required: True
-            type: str
-
-        hcp_token:
             description: 
-                - HCP API token
-                - Can also be specified via HCP_TOKEN environment variable
-            required: False
+                - Name of the secret to retrieve
+                - Must be a rotating secret
+            required: true
             type: str
+        hcp_token:
+            description:
+                - HCP API token for authentication
+                - Can be specified via HCP_TOKEN environment variable
+                - Cannot be used together with client credentials (hcp_client_id/hcp_client_secret)
+            required: false
+            type: str
+            env:
+                - name: HCP_TOKEN
         hcp_client_id:
             description:
                 - HCP Client ID for OAuth authentication
-                - Can also be specified via HCP_CLIENT_ID environment variable
-            required: False
+                - Can be specified via HCP_CLIENT_ID environment variable
+                - Must be used together with hcp_client_secret
+                - Cannot be used together with hcp_token
+            required: false
             type: str
+            env:
+                - name: HCP_CLIENT_ID
         hcp_client_secret:
             description:
                 - HCP Client Secret for OAuth authentication
-                - Can also be specified via HCP_CLIENT_SECRET environment variable
-            required: False
+                - Can be specified via HCP_CLIENT_SECRET environment variable
+                - Must be used together with hcp_client_id
+                - Cannot be used together with hcp_token
+            required: false
             type: str
-
+            env:
+                - name: HCP_CLIENT_SECRET
     notes:
-        - Authentication can be provided either via token (hcp_token/HCP_TOKEN) or client credentials
-          (hcp_client_id + hcp_client_secret or HCP_CLIENT_ID + HCP_CLIENT_SECRET)
-        - Environment variables take precedence over playbook variables
-        - For non-rotating secrets, use hvs_static_secret or hvs_dynamic_secret plugins
+        - Authentication requires either an API token (hcp_token/HCP_TOKEN) or client credentials (hcp_client_id + hcp_client_secret)
+        - Authentication methods cannot be mixed - use either token or client credentials
+        - Environment variables take precedence over playbook parameters
+        - All timestamps are returned in RFC3339 format
+        - Returns latest non-revoked version by default
+        - Secret must already exist and be of type 'rotating'
+        - Returns error if secret type does not match
+        - Multiple values may be returned in the values dictionary
+        - Expiration and revocation times are included in response
+    seealso:
+        - module: benemon.hcp_community_collection.hvs_static_secret
+        - module: benemon.hcp_community_collection.hvs_dynamic_secret
+        - name: HVS API Documentation
+          link: https://developer.hashicorp.com/hcp/api-docs/vault-secrets
 """
 
 EXAMPLES = r"""
-# Retrieve latest version of a rotating secret
-- ansible.builtin.debug:
-    msg: "{{ lookup('benemon.hcp_community_collection.hvs_rotating_secret', 
-             organization_id=org_id,
-             project_id=proj_id,
-             app_name='my-app',
-             secret_name='database_credentials') }}"
+# Get latest version of rotating secret using token auth
+- name: Get database credentials
+  ansible.builtin.debug:
+    msg: "{{ lookup('benemon.hcp_community_collection.hvs_rotating_secret',
+             'organization_id=my-org-id',
+             'project_id=my-project-id',
+             'app_name=db-app',
+             'secret_name=database-password') }}"
 
+# Use rotating secret with error handling
+- name: Get rotating secret with validation
+  block:
+    - name: Retrieve secret
+      set_fact:
+        api_key: "{{ lookup('benemon.hcp_community_collection.hvs_rotating_secret',
+                     'organization_id=my-org-id',
+                     'project_id=my-project-id',
+                     'app_name=api-app',
+                     'secret_name=api-key') }}"
+    - name: Verify secret values exist
+      assert:
+        that:
+          - api_key.rotating_version.values is defined
+          - api_key.rotating_version.values | length > 0
+        fail_msg: "Retrieved secret has no values"
+  rescue:
+    - name: Handle lookup failure
+      debug:
+        msg: "Failed to retrieve rotating secret or invalid data received"
 
+# Check expiration of rotating secret
+- name: Get and check rotating credentials
+  block:
+    - name: Get credentials
+      set_fact:
+        creds: "{{ lookup('benemon.hcp_community_collection.hvs_rotating_secret',
+                   'organization_id=my-org-id',
+                   'project_id=my-project-id',
+                   'app_name=service-app',
+                   'secret_name=service-creds') }}"
+    - name: Check expiration
+      debug:
+        msg: "Warning: Credentials expire at {{ creds.rotating_version.expires_at }}"
+      when: creds.rotating_version.expires_at is defined
 
-# Use rotating credentials in a configuration
+# Use rotating secret in configuration with value checking
 - name: Configure application with rotating credentials
   ansible.builtin.template:
-    src: app-config.j2
+    src: config.j2
     dest: /etc/myapp/config.yml
+    mode: '0600'
   vars:
-    credentials: "{{ lookup('benemon.hcp_community_collection.hvs_rotating_secret',
-                    organization_id=org_id,
-                    project_id=proj_id,
-                    app_name='my-app',
-                    secret_name='service_account') }}"
+    secret: "{{ lookup('benemon.hcp_community_collection.hvs_rotating_secret',
+                'organization_id=my-org-id',
+                'project_id=my-project-id',
+                'app_name=my-app',
+                'secret_name=app-secret') }}"
+  when: 
+    - secret.rotating_version is defined 
+    - secret.rotating_version.values is defined
+    - secret.rotating_version.revoked_at is not defined
 """
 
 RETURN = r"""
@@ -85,28 +153,76 @@ RETURN = r"""
     type: list
     elements: dict
     contains:
+      name:
+        description: Name of the secret
+        type: str
+        returned: always
+      type:
+        description: Type of secret (will be 'rotating')
+        type: str
+        returned: always
+      provider:
+        description: Provider for this rotating secret
+        type: str
+        returned: always
+      latest_version:
+        description: Latest version number
+        type: int
+        format: int64
+        returned: always
+      created_at:
+        description: Creation timestamp
+        type: str
+        format: date-time
+        returned: always
+      created_by_id:
+        description: ID of the principal who created the secret
+        type: str
+        returned: always
+      sync_status:
+        description: Status of any syncs for this secret
+        type: dict
+        returned: when syncs configured
+        contains:
+          status:
+            description: Current sync status
+            type: str
+          updated_at:
+            description: Last sync update timestamp
+            type: str
+            format: date-time
+          last_error_code:
+            description: Error code from last sync attempt if any
+            type: str
       rotating_version:
-        description: Rotating secret data
+        description: The current rotating secret version
         type: dict
         returned: always
         contains:
-          values:
-            description: Dictionary of secret values
-            type: dict
           version:
             description: Version number
             type: int
-          created_at:
-            description: Creation timestamp
+            format: int64
+          values:
+            description: Map of secret values for this version
+            type: dict
+          created_by_id:
+            description: ID of the principal who created this version
             type: str
+          created_at:
+            description: When this version was created
+            type: str
+            format: date-time
           expires_at:
             description: When this version expires
             type: str
+            format: date-time
           revoked_at:
             description: When this version was revoked (if applicable)
             type: str
+            format: date-time
           keys:
-            description: List of available secret keys
+            description: List of available secret value keys
             type: list
             elements: str
 """
