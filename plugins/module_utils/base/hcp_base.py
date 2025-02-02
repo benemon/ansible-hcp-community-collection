@@ -5,6 +5,8 @@ import os
 import requests
 import sys
 import json
+import time
+import random 
 from datetime import datetime, timezone, timedelta
 
 display = Display()
@@ -105,46 +107,55 @@ class HCPLookupBase(LookupBase):
         
         return token_data['access_token']
 
-    def _get_token_from_credentials(self, client_id, client_secret):
-        """Get HCP authentication token using client credentials OAuth2 flow."""
-        auth_url = "https://auth.idp.hashicorp.com/oauth2/token"
-        
+    def get_token_from_credentials(self, client_id, client_secret):
+        """
+        Obtain token from client credentials with backoff retry logic
+        """
+        url = f"{self.base_url}/oauth/token"
         data = {
-            'client_id': client_id,
-            'client_secret': client_secret,
             'grant_type': 'client_credentials',
-            'audience': 'https://api.hashicorp.cloud'
+            'audience': 'https://api.hashicorp.cloud',
+            'client_id': client_id,
+            'client_secret': client_secret
         }
-        
-        headers = {
-            'Content-Type': 'application/x-www-form-urlencoded'
-        }
-        
-        display.vvv(f"Attempting to get token from {auth_url}")
-        
-        try:
-            response = requests.post(auth_url, data=data, headers=headers)
-            display.vvv(f"Auth response status code: {response.status_code}")
-            
-            if response.status_code != 200:
-                display.vvv(f"Auth error response: {response.text}")
+
+        max_retries = 5  # Maximum number of retry attempts
+        base_delay = 1   # Initial delay in seconds
+        max_delay = 32   # Maximum delay between retries
+
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(url, json=data)
+                
+                if response.status_code == 429:  # Rate limit exceeded
+                    if attempt == max_retries - 1:
+                        raise AnsibleError('Maximum retry attempts reached for rate limit')
+                    
+                    # Calculate exponential backoff with jitter
+                    delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+                    display.vvv(f"Rate limit exceeded. Retrying in {delay:.2f} seconds (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(delay)
+                    continue
+
                 response.raise_for_status()
                 
-            json_response = response.json()
-            display.vvv("Successfully obtained auth token")
-            
-            if not all(k in json_response for k in ['access_token', 'expires_in']):
-                display.vvv(f"Unexpected response format. Keys: {list(json_response.keys())}")
-                raise KeyError('Missing required fields in response')
+                json_response = response.json()
+                display.vvv("Successfully obtained auth token")
                 
-            return json_response
-            
-        except requests.exceptions.RequestException as e:
-            raise AnsibleError(f'Failed to obtain token from client credentials: {str(e)}')
-        except KeyError as e:
-            raise AnsibleError(f'Unexpected response format from auth endpoint: {str(e)}')
-        except Exception as e:
-            raise AnsibleError(f'Unexpected error while obtaining token: {str(e)}')
+                if not all(k in json_response for k in ['access_token', 'expires_in']):
+                    display.vvv(f"Unexpected response format. Keys: {list(json_response.keys())}")
+                    raise KeyError('Missing required fields in response')
+                
+                return json_response
+                
+            except requests.exceptions.RequestException as e:
+                if attempt == max_retries - 1:
+                    raise AnsibleError(f'Failed to obtain token from client credentials: {str(e)}')
+                continue
+            except KeyError as e:
+                raise AnsibleError(f'Unexpected response format from auth endpoint: {str(e)}')
+            except Exception as e:
+                raise AnsibleError(f'Unexpected error while obtaining token: {str(e)}')
 
     def _get_headers(self, token):
         """Get standard headers for HCP API."""
