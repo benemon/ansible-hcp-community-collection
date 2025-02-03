@@ -122,9 +122,9 @@ class HCPLookupBase(LookupBase):
             'Content-Type': 'application/x-www-form-urlencoded'
         }
 
-        max_retries = 5  # Maximum number of retry attempts
-        base_delay = 1   # Initial delay in seconds
-        max_delay = 32   # Maximum delay between retries
+        max_retries = 5
+        base_delay = 1
+        max_delay = 32
 
         for attempt in range(max_retries):
             try:
@@ -132,12 +132,22 @@ class HCPLookupBase(LookupBase):
                 response = requests.post(auth_url, data=data, headers=headers)
                 display.vvv(f"Auth response status code: {response.status_code}")
                 
-                if response.status_code == 429:  # Rate limit exceeded
+                if response.status_code == 429:
                     if attempt == max_retries - 1:
                         raise AnsibleError('Maximum retry attempts reached for rate limit')
                     
-                    # Calculate exponential backoff with jitter
-                    delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+                    # Check for Retry-After header
+                    retry_after = response.headers.get('Retry-After')
+                    if retry_after:
+                        try:
+                            delay = float(retry_after)
+                        except (ValueError, TypeError):
+                            # Fall back to exponential backoff if header is invalid
+                            delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+                    else:
+                        # Use exponential backoff with jitter if no Retry-After header
+                        delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+                    
                     display.vvv(f"Rate limit exceeded. Retrying in {delay:.2f} seconds (attempt {attempt + 1}/{max_retries})")
                     time.sleep(delay)
                     continue
@@ -147,12 +157,18 @@ class HCPLookupBase(LookupBase):
                     response.raise_for_status()
                 
                 json_response = response.json()
+                if not all(k in json_response for k in ['access_token', 'expires_in']):
+                    raise KeyError('Response missing required fields')
+                    
                 display.vvv("Successfully obtained auth token")
                 return json_response
-                
+            
             except requests.exceptions.RequestException as e:
                 if attempt == max_retries - 1:
                     raise AnsibleError(f'Failed to obtain token from client credentials: {str(e)}')
+                # Calculate delay for non-429 errors
+                delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+                time.sleep(delay)
                 continue
             except Exception as e:
                 raise AnsibleError(f'Unexpected error while obtaining token: {str(e)}')
