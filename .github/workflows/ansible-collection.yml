@@ -109,7 +109,7 @@ jobs:
       - name: Run integration tests
         run: |
           cd ../ansible_collections/benemon/hcp_community_collection
-          ansible-test integration --venv --python ${{ matrix.python-version }} -v
+          ansible-test integration --venv --python ${{ matrix.python-version }}
 
   collect-versions:
     name: Collect Version Information
