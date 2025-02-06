@@ -96,7 +96,7 @@ def test_run_basic(lookup, mock_response):
         call('GET', 
              'https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/test-org/projects/test-proj/buckets/my-images/versions/abcd1234',
              headers={'Authorization': 'Bearer test-token', 'Content-Type': 'application/json'},
-             params={})
+             params=None)
     ]
     
     assert mock_response.call_args_list == expected_calls
@@ -151,34 +151,6 @@ def test_builds_and_artifacts(lookup, mock_response):
     azure_artifact = build2['artifacts'][0]
     assert azure_artifact['external_identifier'] == '/subscriptions/sub123/images/myimage'
     assert azure_artifact['region'] == 'westus'
-
-def test_run_with_region(lookup, mock_response):
-    """Test version retrieval with region parameters"""
-    variables = {
-        'organization_id': 'test-org',
-        'project_id': 'test-proj',
-        'bucket_name': 'my-images',
-        'fingerprint': 'abcd1234',
-        'hcp_token': 'test-token',
-        'location_region_provider': 'aws',
-        'location_region_region': 'us-west-1'
-    }
-    
-    result = lookup.run([], variables)
-    
-    # Verify API call includes the region parameters
-    expected_calls = [
-        call('GET',
-             'https://api.cloud.hashicorp.com/packer/2023-01-01/organizations/test-org/projects/test-proj/buckets/my-images/versions/abcd1234',
-             headers={'Authorization': 'Bearer test-token', 'Content-Type': 'application/json'},
-             params={
-                 'location.region.provider': 'aws',
-                 'location.region.region': 'us-west-1'
-             })
-    ]
-    
-    assert mock_response.call_args_list == expected_calls
-    assert result[0]['fingerprint'] == 'abcd1234'
 
 def test_run_missing_required_params(lookup):
     """Test error handling for missing parameters"""

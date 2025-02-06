@@ -228,8 +228,6 @@ def test_auth_token_invalid_response(lookup):
         
         assert 'Response missing required fields' in str(exc.value)
 
-# Include your existing tests here
-
 @pytest.fixture
 def mock_response():
     with patch('requests.request') as mock_request:

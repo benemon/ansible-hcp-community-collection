@@ -310,7 +310,7 @@ class HCPLookupBase(LookupBase):
             return {'results': response}
 
         # Check for known result keys
-        result_keys = ['apps', 'secrets', 'secret', 'integrations', 'version', 'channel']
+        result_keys = ['apps', 'secrets', 'secret', 'integrations', 'version', 'versions','channel', 'channels', 'bucket', 'buckets']
         for key in result_keys:
             if key in response:
                 return {'results': response[key]}
