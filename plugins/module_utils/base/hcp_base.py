@@ -122,9 +122,9 @@ class HCPLookupBase(LookupBase):
             'Content-Type': 'application/x-www-form-urlencoded'
         }
 
-        max_retries = 5
+        max_retries = 10
         base_delay = 1
-        max_delay = 32
+        max_delay = 64
 
         for attempt in range(max_retries):
             try:
