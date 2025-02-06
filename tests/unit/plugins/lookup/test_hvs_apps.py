@@ -175,7 +175,7 @@ def test_auth_token_max_retries(lookup):
             lookup._get_auth_token(variables)
         
         assert 'Maximum retry attempts reached for rate limit' in str(exc.value)
-        assert mock_auth_request.call_count == 5  # Max retries
+        assert mock_auth_request.call_count == 10  # Max retries
 
 def test_auth_token_env_vars(lookup):
     """Test token acquisition using environment variables"""

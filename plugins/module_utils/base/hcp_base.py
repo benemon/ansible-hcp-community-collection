@@ -123,7 +123,7 @@ class HCPLookupBase(LookupBase):
         }
 
         max_retries = 10
-        base_delay = 1
+        base_delay = 2
         max_delay = 64
 
         for attempt in range(max_retries):
