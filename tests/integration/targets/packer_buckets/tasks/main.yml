@@ -1,0 +1,125 @@
+---
+- name: Test Packer Buckets lookup plugin
+  block:
+    # Validate input variables
+    - name: Validate required input vars
+      assert:
+        that:
+          - hcp_organisation_id is defined
+          - hcp_project_id is defined
+        fail_msg: "Required variables hcp_organisation_id and hcp_project_id must be set"
+
+    # Test basic functionality
+    - name: Retrieve bucket information
+      set_fact:
+        bucket_list: "{{ lookup('benemon.hcp_community_collection.packer_buckets', 
+                       'organization_id=' ~ hcp_organisation_id, 
+                       'project_id=' ~ hcp_project_id) }}"
+
+    # Verify bucket list retrieval
+    - name: Verify bucket list structure
+      assert:
+        that:
+          - bucket_list is defined
+          - bucket_list is sequence
+          - bucket_list | length > 0
+        fail_msg: "Bucket list retrieval failed - unexpected structure or empty list"
+
+    # Check individual bucket details
+    - name: Verify bucket details
+      assert:
+        that:
+          - bucket.id is defined
+          - bucket.name is defined
+          - bucket.location is defined
+          - bucket.location.organization_id == hcp_organisation_id
+          - bucket.location.project_id == hcp_project_id
+          - bucket.created_at is defined
+          - bucket.updated_at is defined
+          - bucket.version_count is defined
+          - bucket.resource_name is defined
+        fail_msg: "Bucket details are missing or invalid for bucket {{ bucket.name }}"
+      loop: "{{ bucket_list }}"
+      loop_control:
+        label: "{{ bucket.name }}"
+        loop_var: bucket
+
+    # Check latest version if present
+    - name: Verify latest version details
+      assert:
+        that:
+          - bucket.latest_version.id is defined
+          - bucket.latest_version.fingerprint is defined
+          - bucket.latest_version.name is defined
+          - bucket.latest_version.status is defined
+          - bucket.latest_version.created_at is defined
+          - bucket.latest_version.updated_at is defined
+        fail_msg: "Latest version details are missing or invalid for bucket {{ bucket.name }}"
+      loop: "{{ bucket_list }}"
+      loop_control:
+        label: "{{ bucket.name }}"
+        loop_var: bucket
+      when: bucket.latest_version is defined
+
+    # Check platform information 
+    - name: Verify platform information
+      assert:
+        that:
+          - bucket.platforms | length > 0
+        fail_msg: "Platform information is missing or invalid for bucket {{ bucket.name }}"
+      loop: "{{ bucket_list }}"
+      loop_control:
+        label: "{{ bucket.name }}"
+        loop_var: bucket
+      when: bucket.platforms is defined
+
+    # Test pagination
+    - name: Test pagination
+      set_fact:
+        paginated_buckets: "{{ lookup('benemon.hcp_community_collection.packer_buckets', 
+                           'organization_id=' ~ hcp_organisation_id, 
+                           'project_id=' ~ hcp_project_id,
+                           'page_size=1') }}"
+
+    - name: Verify pagination
+      assert:
+        that:
+          - paginated_buckets is sequence
+          - paginated_buckets | length == 2
+        fail_msg: "Pagination failed - received more results than requested"
+
+    # Test sorting
+    - name: Test sorting by name descending
+      set_fact:
+        sorted_buckets: "{{ lookup('benemon.hcp_community_collection.packer_buckets',
+                            'organization_id=' ~ hcp_organisation_id,
+                            'project_id=' ~ hcp_project_id,
+                            'order_by=name desc') }}"
+
+    - name: Verify sorting
+      assert:
+        that:
+          - sorted_buckets is sequence
+          - sorted_buckets | length > 0
+          - sorted_buckets | length == bucket_list | length
+        fail_msg: "Sorting failed - unexpected result structure or count"
+
+    # Error handling test
+    - name: Test with invalid organization
+      set_fact:
+        invalid_org_buckets: "{{ lookup('benemon.hcp_community_collection.packer_buckets', 
+                             'organization_id=invalid_org', 
+                             'project_id=' ~ hcp_project_id) }}"
+      ignore_errors: true
+      register: bucket_error
+
+    - name: Verify error handling
+      assert:
+        that:
+          - bucket_error.failed is defined
+        fail_msg: "Error handling for invalid organization did not raise an error"
+
+  rescue:
+    - name: Handle test failures
+      fail:
+        msg: "Integration test failed: {{ ansible_failed_result | default('Unknown error') }}"

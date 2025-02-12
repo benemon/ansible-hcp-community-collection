@@ -68,28 +68,12 @@ DOCUMENTATION = r"""
             type: str
             env:
                 - name: HCP_CLIENT_SECRET
-        location_region_provider:
-            description:
-                - Cloud provider for the region
-                - Examples - "aws", "gcp", "azure"
-                - Optional filter for region-specific results
-            required: false
-            type: str
-        location_region_region:
-            description:
-                - Cloud region identifier
-                - Examples - "us-west1", "us-east1"
-                - Must be a valid region for the specified provider
-                - Only used if location_region_provider is specified
-            required: false
-            type: str
     notes:
         - Authentication requires either an API token (hcp_token/HCP_TOKEN) or client credentials (hcp_client_id + hcp_client_secret)
         - Authentication methods cannot be mixed - use either token or client credentials
         - Environment variables take precedence over playbook parameters
         - All timestamps are returned in RFC3339 format
         - Version must exist in the specified bucket
-        - Region filters are optional but must be valid if specified
         - Returns error if bucket or version does not exist
         - Build information includes all artifacts and their metadata
         - Revocation status and scheduling is included when applicable
@@ -110,31 +94,6 @@ EXAMPLES = r"""
              'project_id=my-project-id',
              'bucket_name=my-images',
              'fingerprint=abcd1234') }}"
-
-# Get version from specific region with error handling
-- name: Get version with validation
-  block:
-    - name: Retrieve version
-      set_fact:
-        version_info: "{{ lookup('benemon.hcp_community_collection.packer_version',
-                         'organization_id=my-org-id',
-                         'project_id=my-project-id',
-                         'bucket_name=my-images',
-                         'fingerprint=abcd1234',
-                         'location_region_provider=aws',
-                         'location_region_region=us-west-1') }}"
-    - name: Check version status
-      assert:
-        that: version_info.status == "VERSION_ACTIVE"
-        fail_msg: "Version is not active"
-    - name: Verify no revocation
-      assert:
-        that: version_info.revoke_at is not defined
-        fail_msg: "Version is scheduled for revocation"
-  rescue:
-    - name: Handle lookup failure
-      debug:
-        msg: "Failed to retrieve version information or validation failed"
 
 # Process build artifacts
 - name: Get AWS AMI IDs
@@ -372,16 +331,10 @@ class LookupModule(HCPLookupBase):
                    f"/projects/{variables['project_id']}/buckets/{variables['bucket_name']}"
                    f"/versions/{variables['fingerprint']}")
 
-        # Process optional region parameters
-        params = {}
-        if 'location_region_provider' in variables:
-            params['location.region.provider'] = variables['location_region_provider']
-        if 'location_region_region' in variables:
-            params['location.region.region'] = variables['location_region_region']
 
         try:
             display.vvv(f"Making request to endpoint: {endpoint}")
-            result = self._make_request('GET', endpoint, variables, params)
+            result = self._make_request('GET', endpoint, variables)
             
             # Extract version information from response
             version = result.get('version', {})

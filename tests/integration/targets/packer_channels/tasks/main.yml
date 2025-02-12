@@ -1,0 +1,93 @@
+---
+- name: Test Packer Channels lookup plugin
+  block:
+    # Validate input variables
+    - name: Validate required input vars
+      assert:
+        that:
+          - hcp_organisation_id is defined
+          - hcp_project_id is defined
+          - test_bucket_name is defined
+        fail_msg: "Required variables hcp_organisation_id, hcp_project_id, and test_bucket_name must be set"
+
+    # Test basic functionality
+    - name: Retrieve channel information
+      set_fact:
+        channel_list: "{{ lookup('benemon.hcp_community_collection.packer_channels', 
+                       'organization_id=' ~ hcp_organisation_id, 
+                       'project_id=' ~ hcp_project_id,
+                       'bucket_name=' ~ test_bucket_name) }}"
+
+    - name: output
+      debug:
+        var: channel_list
+
+    # Verify channel list retrieval
+    - name: Verify channel list structure
+      assert:
+        that:
+          - channel_list is defined
+          - channel_list is sequence
+          - channel_list | length > 0
+        fail_msg: "Channel list retrieval failed - unexpected structure or empty list"
+
+    # Check individual channel details
+    - name: Verify channel details
+      assert:
+        that:
+          - channel.id is defined
+          - channel.name is defined
+          - channel.bucket_name == test_bucket_name
+          - channel.author_id is defined
+          - channel.created_at is defined
+          - channel.updated_at is defined
+          - channel.managed is boolean
+          - channel.restricted is boolean
+        fail_msg: "Channel details are missing or invalid for channel {{ channel.name }}"
+      loop: "{{ channel_list }}"
+      loop_control:
+        loop_var: channel
+
+    # Check version assignment if present
+    - name: Verify version assignment
+      assert:
+        that:
+          - channel.version is mapping
+          - channel.version.id is defined
+          - channel.version.name is defined
+          - channel.version.fingerprint is defined
+        fail_msg: "Version assignment details are missing or invalid for channel {{ channel.name }}"
+      loop: "{{ channel_list }}"
+      loop_control:
+        loop_var: channel
+      when: channel.version is defined
+
+    # Check for latest channel presence
+    - name: Verify latest channel exists
+      assert:
+        that:
+          - channel_list | selectattr('name', 'eq', 'latest') | list | length == 1
+          - (channel_list | selectattr('name', 'eq', 'latest') | first).managed == true
+        fail_msg: "Latest channel is missing or not properly configured"
+
+
+    # Test with invalid bucket
+    - name: Test with invalid bucket
+      set_fact:
+        invalid_bucket_channels: "{{ lookup('benemon.hcp_community_collection.packer_channels', 
+                                'organization_id=' ~ hcp_organisation_id, 
+                                'project_id=' ~ hcp_project_id,
+                                'bucket_name=non_existent_bucket') }}"
+      ignore_errors: true
+      register: channel_error
+
+    - name: Verify error handling
+      assert:
+        that:
+          - channel_error.failed is defined
+        fail_msg: "Error handling for invalid cloud provider did not raise an error"
+
+  rescue:
+    - name: Handle test failures
+      fail:
+        msg: "Integration test failed: {{ ansible_failed_result | default('Unknown error') }}"

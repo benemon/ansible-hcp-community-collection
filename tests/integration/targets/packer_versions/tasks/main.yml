@@ -1,0 +1,130 @@
+---
+- name: Test Packer Versions lookup plugin
+  block:
+    # Validate input variables
+    - name: Validate required input vars
+      assert:
+        that:
+          - hcp_organisation_id is defined
+          - hcp_project_id is defined
+          - test_bucket_name is defined
+        fail_msg: "Required variables hcp_organisation_id, hcp_project_id, and test_bucket_name must be set"
+
+    # Test basic functionality
+    - name: Retrieve version information
+      set_fact:
+        version_list: "{{ lookup('benemon.hcp_community_collection.packer_versions', 
+                       'organization_id=' ~ hcp_organisation_id, 
+                       'project_id=' ~ hcp_project_id,
+                       'bucket_name=' ~ test_bucket_name) }}"
+
+    # Verify version list retrieval
+    - name: Verify version list structure
+      assert:
+        that:
+          - version_list is defined
+          - version_list is sequence
+          - version_list | length > 0
+        fail_msg: "Version list retrieval failed - unexpected structure or empty list"
+
+    # Check individual version details
+    - name: Verify version details
+      assert:
+        that:
+          - version.id is defined
+          - version.bucket_name == test_bucket_name
+          - version.name is defined
+          - version.status is defined
+          - version.author_id is defined
+          - version.created_at is defined
+          - version.updated_at is defined
+          - version.fingerprint is defined
+          - version.has_descendants is boolean
+          - version.template_type is defined
+        fail_msg: "Version details are missing or invalid for version {{ version.fingerprint }}"
+      loop: "{{ version_list }}"
+      loop_control:
+        loop_var: version
+
+    # Check builds if present
+    - name: Verify build details
+      assert:
+        that:
+          - build.id is defined
+          - build.component_type is defined
+          - build.status is defined
+          - build.platform is defined
+          - build.artifacts is sequence
+        fail_msg: "Build details are missing or invalid for build {{ build.id }}"
+      loop: "{{ version_list | selectattr('builds', 'defined') | map(attribute='builds') | flatten }}"
+      loop_control:
+        loop_var: build
+      when: version_list | selectattr('builds', 'defined') | list | length > 0
+
+    # Test pagination
+    - name: Test pagination
+      set_fact:
+        paginated_versions: "{{ lookup('benemon.hcp_community_collection.packer_versions', 
+                            'organization_id=' ~ hcp_organisation_id, 
+                            'project_id=' ~ hcp_project_id,
+                            'bucket_name=' ~ test_bucket_name,
+                            'page_size=1') }}"
+
+    - name: Verify pagination
+      assert:
+        that:
+          - paginated_versions is sequence
+          - paginated_versions | length == 2
+        fail_msg: "Pagination failed - received more results than requested"
+
+    # Test sorting
+    - name: Test sorting by name
+      set_fact:
+        sorted_versions: "{{ lookup('benemon.hcp_community_collection.packer_versions', 
+                         'organization_id=' ~ hcp_organisation_id, 
+                         'project_id=' ~ hcp_project_id,
+                         'bucket_name=' ~ test_bucket_name,
+                         'order_by=name asc') }}"
+
+    - name: Verify sorting
+      assert:
+        that:
+          - sorted_versions is sequence
+          - sorted_versions | length > 0
+          - sorted_versions | length == version_list | length
+        fail_msg: "Sorting failed - unexpected result structure or count"
+
+    # Check revocation information if present
+    - name: Verify revocation details
+      assert:
+        that:
+          - version.revoke_at is defined
+          - version.revocation_message is defined
+          - version.revocation_author is defined
+          - version.revocation_type is defined
+        fail_msg: "Revocation details are missing or invalid for version {{ version.fingerprint }}"
+      loop: "{{ version_list }}"
+      loop_control:
+        loop_var: version
+      when: version.revoke_at is defined
+
+    # Test with invalid bucket
+    - name: Test with invalid bucket
+      set_fact:
+        invalid_bucket_versions: "{{ lookup('benemon.hcp_community_collection.packer_versions', 
+                                'organization_id=' ~ hcp_organisation_id, 
+                                'project_id=' ~ hcp_project_id,
+                                'bucket_name=non_existent_bucket') }}"
+      ignore_errors: true
+      register: version_error
+
+    - name: Verify error handling
+      assert:
+        that:
+          - version_error.failed is defined
+        fail_msg: "Error handling for invalid bucket did not raise an error"
+
+  rescue:
+    - name: Handle test failures
+      fail:
+        msg: "Integration test failed: {{ ansible_failed_result | default('Unknown error') }}"

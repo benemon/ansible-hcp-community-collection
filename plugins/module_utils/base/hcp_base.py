@@ -5,6 +5,8 @@ import os
 import requests
 import sys
 import json
+import time
+import random 
 from datetime import datetime, timezone, timedelta
 
 display = Display()
@@ -106,7 +108,7 @@ class HCPLookupBase(LookupBase):
         return token_data['access_token']
 
     def _get_token_from_credentials(self, client_id, client_secret):
-        """Get HCP authentication token using client credentials OAuth2 flow."""
+        """Get HCP authentication token using client credentials OAuth2 flow with backoff."""
         auth_url = "https://auth.idp.hashicorp.com/oauth2/token"
         
         data = {
@@ -119,32 +121,57 @@ class HCPLookupBase(LookupBase):
         headers = {
             'Content-Type': 'application/x-www-form-urlencoded'
         }
-        
-        display.vvv(f"Attempting to get token from {auth_url}")
-        
-        try:
-            response = requests.post(auth_url, data=data, headers=headers)
-            display.vvv(f"Auth response status code: {response.status_code}")
-            
-            if response.status_code != 200:
-                display.vvv(f"Auth error response: {response.text}")
-                response.raise_for_status()
+
+        max_retries = 10
+        base_delay = 2
+        max_delay = 64
+
+        for attempt in range(max_retries):
+            try:
+                display.vvv(f"Attempting to get token from {auth_url}")
+                response = requests.post(auth_url, data=data, headers=headers)
+                display.vvv(f"Auth response status code: {response.status_code}")
                 
-            json_response = response.json()
-            display.vvv("Successfully obtained auth token")
-            
-            if not all(k in json_response for k in ['access_token', 'expires_in']):
-                display.vvv(f"Unexpected response format. Keys: {list(json_response.keys())}")
-                raise KeyError('Missing required fields in response')
+                if response.status_code == 429:
+                    if attempt == max_retries - 1:
+                        raise AnsibleError('Maximum retry attempts reached for rate limit')
+                    
+                    # Check for Retry-After header
+                    retry_after = response.headers.get('Retry-After')
+                    if retry_after:
+                        try:
+                            delay = float(retry_after)
+                        except (ValueError, TypeError):
+                            # Fall back to exponential backoff if header is invalid
+                            delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+                    else:
+                        # Use exponential backoff with jitter if no Retry-After header
+                        delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+                    
+                    display.vvv(f"Rate limit exceeded. Retrying in {delay:.2f} seconds (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(delay)
+                    continue
+
+                if response.status_code != 200:
+                    display.vvv(f"Auth error response: {response.text}")
+                    response.raise_for_status()
                 
-            return json_response
+                json_response = response.json()
+                if not all(k in json_response for k in ['access_token', 'expires_in']):
+                    raise KeyError('Response missing required fields')
+                    
+                display.vvv("Successfully obtained auth token")
+                return json_response
             
-        except requests.exceptions.RequestException as e:
-            raise AnsibleError(f'Failed to obtain token from client credentials: {str(e)}')
-        except KeyError as e:
-            raise AnsibleError(f'Unexpected response format from auth endpoint: {str(e)}')
-        except Exception as e:
-            raise AnsibleError(f'Unexpected error while obtaining token: {str(e)}')
+            except requests.exceptions.RequestException as e:
+                if attempt == max_retries - 1:
+                    raise AnsibleError(f'Failed to obtain token from client credentials: {str(e)}')
+                # Calculate delay for non-429 errors
+                delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+                time.sleep(delay)
+                continue
+            except Exception as e:
+                raise AnsibleError(f'Unexpected error while obtaining token: {str(e)}')
 
     def _get_headers(self, token):
         """Get standard headers for HCP API."""
@@ -283,7 +310,7 @@ class HCPLookupBase(LookupBase):
             return {'results': response}
 
         # Check for known result keys
-        result_keys = ['apps', 'secrets', 'secret', 'integrations', 'version', 'channel']
+        result_keys = ['apps', 'secrets', 'secret', 'integrations', 'version', 'versions','channel', 'channels', 'bucket', 'buckets']
         for key in result_keys:
             if key in response:
                 return {'results': response[key]}
