@@ -316,7 +316,7 @@ RETURN = r"""
         returned: always
 """
 
-from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.base.hcp_base import HCPLookupBase
+from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.hcp_base import HCPLookupBase
 from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.api_versions import get_api_version
 from ansible.errors import AnsibleError
 from ansible.utils.display import Display

@@ -1,7 +1,4 @@
-from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.base.hcp_terraform_base import HCPTerraformBase
-import time
-
+#!/usr/bin/python
 DOCUMENTATION = """
 ---
 module: hcp_terraform_run
@@ -55,6 +52,7 @@ options:
     required: false
     type: list
     elements: str
+    default: []
   wait:
     description: "If true, the module will wait for the run to complete before exiting."
     required: false
@@ -99,24 +97,41 @@ api_response:
   type: dict
 """
 
+from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.hcp_terraform_base import HCPTerraformBase
+import time
+
 class TerraformRunModule(HCPTerraformBase):
-    def __init__(self, module):
-        """Initialize the module with input parameters."""
-        super().__init__(token=module.params['token'], base_url=module.params['base_url'])
-        self.module = module
-        self.workspace_id = module.params['workspace_id']
-        self.message = module.params['message']
-        self.is_destroy = module.params['is_destroy']
-        self.auto_apply = module.params['auto_apply']
-        self.plan_only = module.params['plan_only']
-        self.variables = module.params['variables']
-        self.targets = module.params['targets']
-        self.wait = module.params['wait']
-        self.timeout = module.params['timeout']
+    def __init__(self):
+        # Define the argument specification for this module.
+        argument_spec = dict(
+            token=dict(type='str', required=True, no_log=True),
+            base_url=dict(type='str', required=False, default="https://app.terraform.io/api/v2"),
+            workspace_id=dict(type='str', required=True),
+            message=dict(type='str', required=False, default="Triggered by Ansible"),
+            is_destroy=dict(type='bool', required=False, default=False),
+            auto_apply=dict(type='bool', required=False, default=False),
+            plan_only=dict(type='bool', required=False, default=False),
+            variables=dict(type='dict', required=False, default={}),
+            targets=dict(type='list', elements='str', required=False, default=[]),
+            wait=dict(type='bool', required=False, default=True),
+            timeout=dict(type='int', required=False, default=600),
+        )
+        # Initialize the base class (which is also an AnsibleModule)
+        super().__init__(argument_spec=argument_spec, supports_check_mode=True)
+        # Extract module-specific parameters.
+        self.workspace_id = self.params.get('workspace_id')
+        self.message = self.params.get('message')
+        self.is_destroy = self.params.get('is_destroy')
+        self.auto_apply = self.params.get('auto_apply')
+        self.plan_only = self.params.get('plan_only')
+        self.variables = self.params.get('variables')
+        self.targets = self.params.get('targets')
+        self.wait = self.params.get('wait')
+        self.timeout = self.params.get('timeout')
 
     def trigger_run(self):
         """Triggers a Terraform run in the specified workspace."""
-        endpoint = f"/runs"
+        endpoint = "/runs"
         payload = {
             "data": {
                 "attributes": {
@@ -134,13 +149,10 @@ class TerraformRunModule(HCPTerraformBase):
             }
         }
 
-        # Add variables if provided
         if self.variables:
             payload["data"]["attributes"]["variables"] = [
                 {"key": k, "value": v, "category": "terraform"} for k, v in self.variables.items()
             ]
-
-        # Add targets if provided
         if self.targets:
             payload["data"]["attributes"]["target_addrs"] = self.targets
 
@@ -152,50 +164,29 @@ class TerraformRunModule(HCPTerraformBase):
         """Waits for the Terraform run to complete."""
         endpoint = f"/runs/{run_id}"
         start_time = time.time()
-
         while True:
             response = self._request("GET", endpoint)
             status = response["data"]["attributes"]["status"]
-
-            if status in ["applied", "errored", "discarded"]:
+            if status in ["planned_and_finished","applied", "errored", "discarded", "canceled", "force_canceled"]:
                 return status, response
-
             if time.time() - start_time > self.timeout:
-                self.module.fail_json(msg=f"Timeout waiting for Terraform run {run_id} to complete.", api_response=response)
-
+                self.fail_json(msg=f"Timeout waiting for Terraform run {run_id} to complete.", api_response=response)
             time.sleep(10)
 
     def run(self):
         """Main logic for triggering and monitoring the Terraform run."""
+        if self.check_mode:
+            self.exit_json(changed=False, msg="Check mode: no run triggered.")
         run_id, api_response = self.trigger_run()
-
         if self.wait:
             status, final_response = self.wait_for_run_completion(run_id)
-            self.module.exit_json(changed=True, run_id=run_id, status=status, api_response=final_response)
+            self.exit_json(changed=True, run_id=run_id, status=status, api_response=final_response)
         else:
-            self.module.exit_json(changed=True, run_id=run_id, api_response=api_response)
+            self.exit_json(changed=True, run_id=run_id, api_response=api_response)
 
 def main():
-    """Ansible module entry point."""
-    module = AnsibleModule(
-        argument_spec=dict(
-            token=dict(type='str', required=True, no_log=True),
-            base_url=dict(type='str', required=False, default="https://app.terraform.io/api/v2"),
-            workspace_id=dict(type='str', required=True),
-            message=dict(type='str', required=False, default="Triggered by Ansible"),
-            is_destroy=dict(type='bool', required=False, default=False),
-            auto_apply=dict(type='bool', required=False, default=False),
-            plan_only=dict(type='bool', required=False, default=False),
-            variables=dict(type='dict', required=False, default={}),
-            targets=dict(type='list', elements='str', required=False, default=[]),
-            wait=dict(type='bool', required=False, default=True),
-            timeout=dict(type='int', required=False, default=600),
-        ),
-        supports_check_mode=True
-    )
-
-    terraform_run = TerraformRunModule(module)
-    terraform_run.run()
+    module = TerraformRunModule()
+    module.run()
 
 if __name__ == "__main__":
     main()
