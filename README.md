@@ -57,18 +57,20 @@ ansible-galaxy collection install -r requirements.yml
 
 The `benemon.hcp_community_collection` collection provides the following lookup plugins:
 
-| Plugin Name         | Description                                                                           |
-|---------------------|---------------------------------------------------------------------------------------|
-| `hvs_static_secret` | Retrieve a static secret from an Application in HCP Vault Secrets.                     |
-| `hvs_dynamic_secret`| Retrieve a dynamic secret from an Application in HCP Vault Secrets.                    |
-| `hvs_rotating_secret`| Retrieve a rotating secret from an Application in HCP Vault Secrets.                  |
-| `hvs_secrets`       | Retrieve all secret metadata from an Application in HCP Vault Secrets.                  |
-| `hvs_apps`          | Retrieve Application metadata from Applications in HCP Vault Secrets.                   |
-| `packer_channel`    | Retrieve Channel metadata from HCP Packer.                                             |
-| `packer_version`    | Retrieve Version metadata from HCP Packer.                                             |
-| `packer_buckets`    | Retrieve metadata about buckets used for artifact storage in HCP Packer.                |
-| `packer_channels`   | Retrieve a list of available channels in HCP Packer.                                    |
-| `packer_versions`   | Retrieve a list of available Packer versions in HCP.                                    |
+| Plugin Name               | Description                                                   |
+|---------------------------|---------------------------------------------------------------|
+| `hvs_static_secret`       | Retrieve a static secret from an Application in HCP Vault Secrets. |
+| `hvs_dynamic_secret`      | Retrieve a dynamic secret from an Application in HCP Vault Secrets. |
+| `hvs_rotating_secret`     | Retrieve a rotating secret from an Application in HCP Vault Secrets. |
+| `hvs_secrets`             | Retrieve all secret metadata from an Application in HCP Vault Secrets. |
+| `hvs_apps`                | Retrieve Application metadata from Applications in HCP Vault Secrets. |
+| `packer_channel`          | Retrieve Channel metadata from HCP Packer. |
+| `packer_version`          | Retrieve Version metadata from HCP Packer. |
+| `packer_buckets`          | Retrieve metadata about buckets used for artifact storage in HCP Packer. |
+| `packer_channels`         | Retrieve a list of available channels in HCP Packer. |
+| `packer_versions`         | Retrieve a list of available Packer versions in HCP. |
+| `hcp_terraform_projects`  | Retrieve a list of projects in HCP Terraform. |
+| `hcp_terraform_oauth_tokens` | Retrieve OAuth tokens used for authentication with VCS providers in HCP Terraform. |
 
 
 Each plugin can be used in playbooks by invoking the `lookup` function, as demonstrated in the example below.
@@ -231,9 +233,11 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
 
 ### Available Modules
 
-| Module Name | Description |
-|-------------|-------------|
-| `hcp_terraform_run` | Triggers a Terraform run in HCP Terraform or Terraform Enterprise. |
+| Module Name                         | Description                                      |
+|--------------------------------------|--------------------------------------------------|
+| `hcp_terraform_run`                  | Triggers a Terraform run in HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_workspace`           | Manages Terraform workspaces in HCP.            |
+| `hcp_terraform_workspace_variable`  | Manages workspace variables in Terraform.       |
 
 ### Example Usage
 
@@ -280,6 +284,104 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
       wait: true
     register: terraform_destroy
 
+```yaml
+- name: Create and Configure Terraform Cloud Workspace
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    # Credentials will be read from environment variables
+    organization: "my-organisation"
+    project_name: "my-project"
+    workspace_name: "aws-infra-ansible"
+    repo_identifier: "my-repo/aws-infra"
+    working_directory: ""  # Root of the repository
+    oauth_client_id: "oc-someClientId67516v"  # Specific OAuth client ID
+    tfe_token: "mySuperSecretToken"
+
+  tasks:
+    - name: Get OAuth tokens for the specified client
+      set_fact:
+        oauth_tokens: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_oauth_tokens', 
+                          'oauth_client_id=' ~ oauth_client_id,
+                          'token=' ~ tfe_token) }}"
+      register: oauth_result
+
+    - name: Extract OAuth token ID
+      set_fact:
+        oauth_token_id: "{{ oauth_tokens.data[0].id }}"
+      when: oauth_tokens.data | length > 0
+      
+    - name: Display OAuth token ID
+      debug:
+        msg: "Using OAuth token ID: {{ oauth_token_id }}"
+
+    - name: Get project ID
+      set_fact:
+        projects: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_projects', 
+                      'organization=' ~organization,
+                      'token=' ~ tfe_token) }}"
+      register: projects_result
+
+    - name: Find AWS project
+      set_fact:
+        project_id: "{{ projects.data | 
+                       selectattr('attributes.name', 'equalto', project_name) | 
+                       map(attribute='id') | first }}"
+      when: projects.data | length > 0
+
+    - name: Display project ID
+      debug:
+        msg: "Using project ID: {{ project_id }}"
+
+    - name: Create Terraform workspace
+      benemon.hcp_community_collection.hcp_terraform_workspace:
+        organization: "{{ organization }}"
+        token: "{{ tfe_token }}"
+        name: "{{ workspace_name }}"
+        description: "AWS Infrastructure managed through Ansible"
+        project_id: "{{ project_id }}"
+        terraform_version: "1.10.0"
+        execution_mode: "remote"
+        auto_apply: false
+        working_directory: "{{ working_directory }}"
+        vcs_repo:
+          oauth_token_id: "{{ oauth_token_id }}"
+          identifier: "{{ repo_identifier }}"
+          branch: "main"
+      register: workspace_result
+
+    - name: Display workspace information
+      debug:
+        msg: "Workspace created with ID: {{ workspace_result.workspace.id }}"
+
+    - name: Create workspace variable
+      benemon.hcp_community_collection.hcp_terraform_variable:
+        workspace_id: "{{ workspace_result.workspace.id }}"
+        token: "{{ tfe_token }}"
+        key: "instance_name"
+        value: "ansible-instance"
+        description: "Name of the EC2 instance"
+        category: "terraform"
+        hcl: false
+      register: variable_result
+
+    - name: Display variable information
+      debug:
+        msg: "Variable created: {{ variable_result.variable.key }}"
+
+    - name: Trigger a plan-only run
+      benemon.hcp_community_collection.hcp_terraform_run:
+        workspace_id: "{{ workspace_result.workspace.id }}"
+        message: "Initial plan triggered by Ansible"
+        token: "{{ tfe_token }}"
+        plan_only: true
+        wait: true
+      register: run_result
+
+    - name: Display run status
+      debug:
+        msg: "Terraform plan completed with status: {{ run_result.status }}"
 
 ## Testing
 

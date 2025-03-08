@@ -4,7 +4,7 @@ __metaclass__ = type
 import pytest
 from unittest.mock import patch, MagicMock
 
-from ansible_collections.benemon.hcp_community_collection.plugins.modules.hcp_terraform_variable import TerraformVariableModule
+from ansible_collections.benemon.hcp_community_collection.plugins.modules.hcp_terraform_workspace_variable import TerraformWorkspaceVariableModule
 from ansible.module_utils.basic import AnsibleModule
 
 # Mock responses for variable API
@@ -120,9 +120,9 @@ def variable_module():
     
     # Patch the __init__ of AnsibleModule to return our mock
     with patch.object(AnsibleModule, '__init__', return_value=None):
-        with patch.object(TerraformVariableModule, '__init__', return_value=None) as mock_init:
+        with patch.object(TerraformWorkspaceVariableModule, '__init__', return_value=None) as mock_init:
             # Create the module
-            module = TerraformVariableModule()
+            module = TerraformWorkspaceVariableModule()
             
             # Set up the module with our mock properties
             module.params = mock_ansible_module.params
