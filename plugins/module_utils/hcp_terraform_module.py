@@ -6,7 +6,7 @@ import time
 import random
 from ansible.module_utils.basic import AnsibleModule
 
-class HCPTerraformBase(AnsibleModule):
+class HCPTerraformModule(AnsibleModule):
     """
     Base class for HCP Terraform modules.
     Extends AnsibleModule to handle authentication and common API request logic.
@@ -14,10 +14,18 @@ class HCPTerraformBase(AnsibleModule):
     def __init__(self, argument_spec, **kwargs):
         # Initialize the AnsibleModule
         super().__init__(argument_spec=argument_spec, **kwargs)
-        self.token = self.params.get('token') or os.getenv("TFE_TOKEN")
-        if not self.token:
-            self.fail_json(msg="HCP Terraform API token is required. Set TFE_TOKEN or provide it explicitly.")
-        self.base_url = self.params.get('base_url') or os.getenv("TF_BASE_URL", "https://app.terraform.io/api/v2")
+        
+        # Only set these values if we're not in a test environment
+        # (where params may be set manually)
+        if hasattr(self, 'params'):
+            self.token = self.params.get('token') or os.getenv("TFE_TOKEN")
+            if not self.token:
+                self.fail_json(msg="HCP Terraform API token is required. Set TFE_TOKEN or provide it explicitly.")
+            self.hostname = self.params.get('hostname') or os.getenv("TFE_HOSTNAME", "https://app.terraform.io")
+            if not self.hostname.endswith('/api/v2'):
+                self.base_url = self.hostname.rstrip('/') + '/api/v2'
+            else:
+                self.base_url = self.hostname
         
         # Warn macOS users about fork()-related issues.
         if sys.platform == 'darwin' and 'OBJC_DISABLE_INITIALIZE_FORK_SAFETY' not in os.environ:

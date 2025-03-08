@@ -230,7 +230,7 @@ RETURN = r"""
         returned: always
 """
 
-from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.hcp_base import HCPLookupBase
+from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.hcp_lookup import HCPLookup
 from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.api_versions import get_api_version
 from ansible.errors import AnsibleError
 from ansible.utils.display import Display
@@ -238,7 +238,7 @@ import json
 
 display = Display()
 
-class LookupModule(HCPLookupBase):
+class LookupModule(HCPLookup):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         try:

@@ -7,17 +7,17 @@ description:
   - Starts a Terraform run in a specified workspace.
   - Supports plan-only, destroy, and auto-apply options.
   - Can wait for the run to complete before exiting.
-author: "Your Name"
+author: "benemon"
 options:
   token:
-    description: "HCP Terraform API token."
+    description: "HCP Terraform API token. This can be set via the TFE_TOKEN environment variable."
     required: true
     type: str
-  base_url:
-    description: "Base URL for the Terraform API (Terraform Cloud or Terraform Enterprise)."
+  hostname:
+    description: "Hostname for the Terraform API (Terraform Cloud or Terraform Enterprise). This can be set via the TFE_HOSTNAME environment variable."
     required: false
     type: str
-    default: "https://app.terraform.io/api/v2"
+    default: "https://app.terraform.io"
   workspace_id:
     description: "ID of the Terraform workspace to execute the run in."
     required: true
@@ -67,16 +67,16 @@ options:
 
 EXAMPLES = """
 - name: Trigger a Terraform run and wait for completion
-  hcp_terraform_run:
-    token: "{{ lookup('env', 'TF_API_TOKEN') }}"
+  benemon.hcp_community_collection.hcp_terraform_run:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
     workspace_id: "ws-abc123"
     message: "Run triggered from Ansible"
     auto_apply: true
     wait: true
 
 - name: Plan-only run
-  hcp_terraform_run:
-    token: "{{ lookup('env', 'TF_API_TOKEN') }}"
+  benemon.hcp_community_collection.hcp_terraform_run:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
     workspace_id: "ws-abc123"
     plan_only: true
     wait: false
@@ -97,15 +97,15 @@ api_response:
   type: dict
 """
 
-from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.hcp_terraform_base import HCPTerraformBase
+from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.hcp_terraform_module import HCPTerraformModule
 import time
 
-class TerraformRunModule(HCPTerraformBase):
+class TerraformRunModule(HCPTerraformModule):
     def __init__(self):
         # Define the argument specification for this module.
         argument_spec = dict(
             token=dict(type='str', required=True, no_log=True),
-            base_url=dict(type='str', required=False, default="https://app.terraform.io/api/v2"),
+            hostname=dict(type='str', required=False, default="https://app.terraform.io"),
             workspace_id=dict(type='str', required=True),
             message=dict(type='str', required=False, default="Triggered by Ansible"),
             is_destroy=dict(type='bool', required=False, default=False),
@@ -116,18 +116,22 @@ class TerraformRunModule(HCPTerraformBase):
             wait=dict(type='bool', required=False, default=True),
             timeout=dict(type='int', required=False, default=600),
         )
+        
         # Initialize the base class (which is also an AnsibleModule)
         super().__init__(argument_spec=argument_spec, supports_check_mode=True)
-        # Extract module-specific parameters.
-        self.workspace_id = self.params.get('workspace_id')
-        self.message = self.params.get('message')
-        self.is_destroy = self.params.get('is_destroy')
-        self.auto_apply = self.params.get('auto_apply')
-        self.plan_only = self.params.get('plan_only')
-        self.variables = self.params.get('variables')
-        self.targets = self.params.get('targets')
-        self.wait = self.params.get('wait')
-        self.timeout = self.params.get('timeout')
+        
+        # Only extract params if we're not in a test environment
+        if hasattr(self, 'params'):
+            # Extract module-specific parameters.
+            self.workspace_id = self.params.get('workspace_id')
+            self.message = self.params.get('message')
+            self.is_destroy = self.params.get('is_destroy')
+            self.auto_apply = self.params.get('auto_apply')
+            self.plan_only = self.params.get('plan_only')
+            self.variables = self.params.get('variables')
+            self.targets = self.params.get('targets')
+            self.wait = self.params.get('wait')
+            self.timeout = self.params.get('timeout')
 
     def trigger_run(self):
         """Triggers a Terraform run in the specified workspace."""
@@ -136,9 +140,9 @@ class TerraformRunModule(HCPTerraformBase):
             "data": {
                 "attributes": {
                     "message": self.message,
-                    "is_destroy": self.is_destroy,
-                    "auto_apply": self.auto_apply,
-                    "plan_only": self.plan_only
+                    "is-destroy": self.is_destroy,
+                    "auto-apply": self.auto_apply,
+                    "plan-only": self.plan_only
                 },
                 "type": "runs",
                 "relationships": {
@@ -154,7 +158,7 @@ class TerraformRunModule(HCPTerraformBase):
                 {"key": k, "value": v, "category": "terraform"} for k, v in self.variables.items()
             ]
         if self.targets:
-            payload["data"]["attributes"]["target_addrs"] = self.targets
+            payload["data"]["attributes"]["target-addrs"] = self.targets
 
         response = self._request("POST", endpoint, data=payload)
         run_id = response["data"]["id"]
@@ -167,7 +171,7 @@ class TerraformRunModule(HCPTerraformBase):
         while True:
             response = self._request("GET", endpoint)
             status = response["data"]["attributes"]["status"]
-            if status in ["planned_and_finished","applied", "errored", "discarded", "canceled", "force_canceled"]:
+            if status in ["planned_and_finished", "applied", "errored", "discarded", "canceled", "force_canceled"]:
                 return status, response
             if time.time() - start_time > self.timeout:
                 self.fail_json(msg=f"Timeout waiting for Terraform run {run_id} to complete.", api_response=response)
@@ -175,14 +179,29 @@ class TerraformRunModule(HCPTerraformBase):
 
     def run(self):
         """Main logic for triggering and monitoring the Terraform run."""
-        if self.check_mode:
-            self.exit_json(changed=False, msg="Check mode: no run triggered.")
-        run_id, api_response = self.trigger_run()
-        if self.wait:
-            status, final_response = self.wait_for_run_completion(run_id)
-            self.exit_json(changed=True, run_id=run_id, status=status, api_response=final_response)
-        else:
-            self.exit_json(changed=True, run_id=run_id, api_response=api_response)
+        try:
+            if self.check_mode:
+                self.exit_json(changed=False, msg="Check mode: no run triggered.")
+                
+            run_id, api_response = self.trigger_run()
+            
+            if self.wait:
+                status, final_response = self.wait_for_run_completion(run_id)
+                self.exit_json(
+                    changed=True, 
+                    run_id=run_id, 
+                    status=status, 
+                    api_response=final_response
+                )
+            else:
+                self.exit_json(
+                    changed=True, 
+                    run_id=run_id, 
+                    api_response=api_response
+                )
+        except Exception as e:
+            error_msg = f"Error triggering Terraform run: {str(e)}"
+            self.fail_json(msg=error_msg)
 
 def main():
     module = TerraformRunModule()

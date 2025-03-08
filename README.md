@@ -10,6 +10,7 @@ The `benemon.hcp_community_collection` Ansible Collection provides lookup plugin
 
 * [HashiCorp Vault Secrets](https://developer.hashicorp.com/hcp/docs/vault-secrets) - Partial
 * [HashiCorp HCP Packer](https://developer.hashicorp.com/hcp/docs/packer) - Partial
+* [HCP Terraform / Terraform Enterprise](https://developer.hashicorp.com/terraform/cloud-docs) - Partial
 
 ## Requirements
 
@@ -23,7 +24,7 @@ There are no expectations that earlier versions of Ansible Core will not work, b
 
 ### Python Version Compatibility
 
-This collection has been tested on Python 3.11 and later.
+This collection has been tested on Python 3.9 and later.
 
 There are no expectations that earlier versions of Python will not work, but you may do so at your own risk. 
 
@@ -50,27 +51,29 @@ Then install it with:
 ansible-galaxy collection install -r requirements.yml
 ```
 
-## Available Plugins
+## Lookup Plugins
 
-### Lookup Plugins
-
-## Available Lookup Plugins
+### Available Lookup Plugins
 
 The `benemon.hcp_community_collection` collection provides the following lookup plugins:
 
-| Plugin Name | Description |
-|-------------|------------|
-| `hvs_static_secret` | Retrieve a static secret from an Application in HCP Vault Secrets. |
-| `hvs_dynamic_secret` | Retrieve a dynamic secret from an Application in HCP Vault Secrets. |
-| `hvs_rotating_secret` | Retrieve a rotating secret from an Application in HCP Vault Secrets. |
-| `hvs_secrets` | Retrieve all secret metadata from an Application in HCP Vault Secrets. |
-| `hvs_apps` | Retrieve Application metadata from Applications in HCP Vault Secrets|
-| `packer_channel` | Retrieve Channel metadata from HCP Packer. |
-| `packer_version` | Retrieve Version metadata from HCP Packer. |
+| Plugin Name         | Description                                                                           |
+|---------------------|---------------------------------------------------------------------------------------|
+| `hvs_static_secret` | Retrieve a static secret from an Application in HCP Vault Secrets.                     |
+| `hvs_dynamic_secret`| Retrieve a dynamic secret from an Application in HCP Vault Secrets.                    |
+| `hvs_rotating_secret`| Retrieve a rotating secret from an Application in HCP Vault Secrets.                  |
+| `hvs_secrets`       | Retrieve all secret metadata from an Application in HCP Vault Secrets.                  |
+| `hvs_apps`          | Retrieve Application metadata from Applications in HCP Vault Secrets.                   |
+| `packer_channel`    | Retrieve Channel metadata from HCP Packer.                                             |
+| `packer_version`    | Retrieve Version metadata from HCP Packer.                                             |
+| `packer_buckets`    | Retrieve metadata about buckets used for artifact storage in HCP Packer.                |
+| `packer_channels`   | Retrieve a list of available channels in HCP Packer.                                    |
+| `packer_versions`   | Retrieve a list of available Packer versions in HCP.                                    |
+
 
 Each plugin can be used in playbooks by invoking the `lookup` function, as demonstrated in the example below.
 
-### Example Usage
+### Examples
 
 #### HashiCorp Vault Secrets
 
@@ -173,7 +176,110 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
     - name: Show version info
       debug:
         var: version_info
+
+    - name: Retrieve list of buckets
+      hosts: localhost
+      vars:
+        hcp_organisation_id: "my-organisation-id"
+        hcp_project_id: "my-project-id"
+      tasks:
+      - name: Retrieve bucket details
+        set_fact:
+          bucket_list: "{{ lookup('benemon.hcp_community_collection.packer_buckets', 
+                              'organization_id=' ~ hcp_organisation_id, 
+                              'project_id=' ~ hcp_project_id) }}"
+      - name: Show buckets list
+        debug:
+          var: bucket_list
+
+    - name: Retrieve available channels
+      hosts: localhost
+      vars:
+        hcp_organisation_id: "my-organisation-id"
+        hcp_project_id: "my-project-id"
+        test_bucket_name: "my-bucket-name"
+      tasks:
+      - name: Retrieve channel information
+        set_fact:
+          channel_list: "{{ lookup('benemon.hcp_community_collection.packer_channels', 
+                              'organization_id=' ~ hcp_organisation_id, 
+                              'project_id=' ~ hcp_project_id,
+                              'bucket_name=' ~ test_bucket_name) }}"
+      - name: Show channels list
+        debug:
+          var: channel_list
+
+      - name: Retrieve available Packer versions
+        hosts: localhost
+        vars:
+          hcp_organisation_id: "my-organisation-id"
+          hcp_project_id: "my-project-id"
+          test_bucket_name: "my-bucket-name"
+        tasks:
+        - name: Retrieve version information
+          set_fact:
+            version_list: "{{ lookup('benemon.hcp_community_collection.packer_versions', 
+                                'organization_id=' ~ hcp_organisation_id, 
+                                'project_id=' ~ hcp_project_id,
+                                'bucket_name=' ~ test_bucket_name) }}"
+        - name: Show versions list
+          debug:
+            var: version_list
 ```
+
+## Modules
+
+### Available Modules
+
+| Module Name | Description |
+|-------------|-------------|
+| `hcp_terraform_run` | Triggers a Terraform run in HCP Terraform or Terraform Enterprise. |
+
+### Example Usage
+
+#### HCP Terraform / Terraform Enterprise
+
+```yaml
+- name: Trigger a Terraform run
+  hosts: localhost
+  vars:
+    terraform_token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    terraform_workspace_id: "ws-abc123"
+  
+  tasks:
+  - name: Run a Terraform plan with auto-apply
+    benemon.hcp_community_collection.hcp_terraform_run:
+      token: "{{ terraform_token }}"
+      workspace_id: "{{ terraform_workspace_id }}"
+      message: "Run triggered from Ansible"
+      auto_apply: true
+      wait: true
+    register: terraform_run
+
+  - name: Show run results
+    debug:
+      var: terraform_run
+
+  - name: Run a plan-only operation with variables
+    benemon.hcp_community_collection.hcp_terraform_run:
+      token: "{{ terraform_token }}"
+      workspace_id: "{{ terraform_workspace_id }}"
+      plan_only: true
+      variables:
+        instance_type: "t3.medium"
+        environment: "staging"
+    register: terraform_plan
+
+  - name: Run a destroy operation
+    benemon.hcp_community_collection.hcp_terraform_run:
+      token: "{{ terraform_token }}"
+      workspace_id: "{{ terraform_workspace_id }}"
+      message: "Destroy environment"
+      is_destroy: true
+      auto_apply: true
+      wait: true
+    register: terraform_destroy
+
 
 ## Testing
 

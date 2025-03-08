@@ -20,7 +20,7 @@ _TOKEN_CACHE = {
     'client_secret': None
 }
 
-class HCPLookupBase(LookupBase):
+class HCPLookup(LookupBase):
     """Base class for HCP lookup plugins."""
     
     def __init__(self, *args, **kwargs):
