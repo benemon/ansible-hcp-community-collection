@@ -69,8 +69,9 @@ The `benemon.hcp_community_collection` collection provides the following lookup 
 | `packer_buckets`          | Retrieve metadata about buckets used for artifact storage in HCP Packer. |
 | `packer_channels`         | Retrieve a list of available channels in HCP Packer. |
 | `packer_versions`         | Retrieve a list of available Packer versions in HCP. |
-| `hcp_terraform_projects`  | Retrieve a list of projects in HCP Terraform. |
-| `hcp_terraform_oauth_tokens` | Retrieve OAuth tokens used for authentication with VCS providers in HCP Terraform. |
+| `hcp_terraform_projects`  | Retrieve a list of projects in HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_oauth_tokens` | Retrieve OAuth tokens used for authentication with VCS providers in HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_variable_sets` | Retrieve a list of variable sets in HCP Terraform or Terraform Enterprise.
 
 
 Each plugin can be used in playbooks by invoking the `lookup` function, as demonstrated in the example below.
@@ -236,8 +237,9 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
 | Module Name                         | Description                                      |
 |--------------------------------------|--------------------------------------------------|
 | `hcp_terraform_run`                  | Triggers a Terraform run in HCP Terraform or Terraform Enterprise. |
-| `hcp_terraform_workspace`           | Manages Terraform workspaces in HCP.            |
-| `hcp_terraform_workspace_variable`  | Manages workspace variables in Terraform.       |
+| `hcp_terraform_workspace`           | Create and manage workspaces in HCP Terraform or Terraform Enterprise.            |
+| `hcp_terraform_workspace_variable`  | Create and manage workspace variables in HCP Terraform or Terraform Enterprise.       |
+| `hcp_terraform_variable_set`        | Create and manage variable sets at organization, project, and workspace levels in HCP Terraform or Terraform Enterprise |
 
 ### Example Usage
 
@@ -298,6 +300,7 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
     working_directory: ""  # Root of the repository
     oauth_client_id: "oc-someClientId67516v"  # Specific OAuth client ID
     tfe_token: "mySuperSecretToken"
+    varset_name: "AWS Credentials"  # Name of the variable set to assign
 
   tasks:
     - name: Get OAuth tokens for the specified client
@@ -356,7 +359,7 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
         msg: "Workspace created with ID: {{ workspace_result.workspace.id }}"
 
     - name: Create workspace variable
-      benemon.hcp_community_collection.hcp_terraform_variable:
+      benemon.hcp_community_collection.hcp_terraform_workspace_variable:
         workspace_id: "{{ workspace_result.workspace.id }}"
         token: "{{ tfe_token }}"
         key: "instance_name"
@@ -370,6 +373,45 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
       debug:
         msg: "Variable created: {{ variable_result.variable.key }}"
 
+    # Find and assign variable set
+    - name: Find the AWS Credentials variable set
+      set_fact:
+        varsets: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_variable_sets', 
+                    'organization=' ~ organization,
+                    'token=' ~ tfe_token,
+                    'name=' ~ varset_name) }}"
+      register: varsets_result
+
+    - name: Check if variable set was found
+      debug:
+        msg: "Found {{ varsets.data | length }} matching variable sets"
+
+    - name: Extract variable set ID
+      set_fact:
+        varset_id: "{{ varsets.data[0].id }}"
+      when: varsets.data | length > 0
+      
+    - name: Display variable set ID
+      debug:
+        msg: "Using variable set ID: {{ varset_id }}"
+      when: varsets.data | length > 0
+
+    - name: Update variable set to assign it to the workspace
+      benemon.hcp_community_collection.hcp_terraform_variable_set:
+        token: "{{ tfe_token }}"
+        organization: "{{ organization }}"
+        name: "{{ varset_name }}"
+        workspace_ids:
+          - "{{ workspace_result.workspace.id }}"
+        state: present
+      when: varsets.data | length > 0
+      register: varset_update_result
+
+    - name: Display result of variable set assignment
+      debug:
+        msg: "Variable set '{{ varset_name }}' successfully assigned to workspace"
+      when: varsets.data | length > 0 and varset_update_result.changed
+
     - name: Trigger a plan-only run
       benemon.hcp_community_collection.hcp_terraform_run:
         workspace_id: "{{ workspace_result.workspace.id }}"
@@ -382,6 +424,8 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
     - name: Display run status
       debug:
         msg: "Terraform plan completed with status: {{ run_result.status }}"
+
+```
 
 ## Testing
 

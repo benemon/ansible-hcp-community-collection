@@ -129,7 +129,7 @@ variable:
     workspace_id:
       description: "The ID of the workspace."
       type: str
-api_response:
+result:
   description: "Raw API response from HCP Terraform."
   returned: always
   type: dict
@@ -322,7 +322,7 @@ class TerraformWorkspaceVariableModule(HCPTerraformModule):
                         changed=True,
                         msg=f"Variable '{self.key}' created successfully",
                         variable=self._format_variable_output(response.get("data", {})),
-                        api_response=response
+                        result=response
                     )
                 else:
                     # Check if update is needed
@@ -341,7 +341,7 @@ class TerraformWorkspaceVariableModule(HCPTerraformModule):
                             changed=True,
                             msg=f"Variable '{self.key}' updated successfully",
                             variable=self._format_variable_output(response.get("data", {})),
-                            api_response=response
+                            result=response
                         )
                     else:
                         # No update needed
@@ -349,19 +349,19 @@ class TerraformWorkspaceVariableModule(HCPTerraformModule):
                             changed=False,
                             msg=f"Variable '{self.key}' already up-to-date",
                             variable=self._format_variable_output(variable),
-                            api_response={"data": variable}
+                            result={"data": variable}
                         )
             else:  # state == 'absent'
                 if variable:
                     # Delete the variable
                     result = self._delete_variable(variable)
-                    self.exit_json(**result, api_response={"deleted": True})
+                    self.exit_json(**result, result={"deleted": True})
                 else:
                     # Variable already doesn't exist
                     self.exit_json(
                         changed=False,
                         msg=f"Variable '{self.key}' already does not exist",
-                        api_response={"deleted": False}
+                        result={"deleted": False}
                     )
                     
         except Exception as e:

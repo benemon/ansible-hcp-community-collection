@@ -91,7 +91,7 @@ status:
   description: "The final status of the run (only if wait=True)."
   returned: when wait=True
   type: str
-api_response:
+result:
   description: "Raw API response from Terraform."
   returned: always
   type: dict
@@ -174,7 +174,7 @@ class TerraformRunModule(HCPTerraformModule):
             if status in ["planned_and_finished", "applied", "errored", "discarded", "canceled", "force_canceled"]:
                 return status, response
             if time.time() - start_time > self.timeout:
-                self.fail_json(msg=f"Timeout waiting for Terraform run {run_id} to complete.", api_response=response)
+                self.fail_json(msg=f"Timeout waiting for Terraform run {run_id} to complete.", result=response)
             time.sleep(10)
 
     def run(self):
@@ -183,7 +183,7 @@ class TerraformRunModule(HCPTerraformModule):
             if self.check_mode:
                 self.exit_json(changed=False, msg="Check mode: no run triggered.")
                 
-            run_id, api_response = self.trigger_run()
+            run_id, result = self.trigger_run()
             
             if self.wait:
                 status, final_response = self.wait_for_run_completion(run_id)
@@ -191,13 +191,13 @@ class TerraformRunModule(HCPTerraformModule):
                     changed=True, 
                     run_id=run_id, 
                     status=status, 
-                    api_response=final_response
+                    result=final_response
                 )
             else:
                 self.exit_json(
                     changed=True, 
                     run_id=run_id, 
-                    api_response=api_response
+                    result=result
                 )
         except Exception as e:
             error_msg = f"Error triggering Terraform run: {str(e)}"

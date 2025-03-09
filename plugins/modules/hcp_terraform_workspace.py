@@ -192,7 +192,7 @@ workspace:
     vcs_repo:
       description: "The VCS repository configuration."
       type: dict
-api_response:
+result:
   description: "Raw API response from HCP Terraform."
   returned: always
   type: dict
@@ -518,7 +518,7 @@ class TerraformWorkspaceModule(HCPTerraformModule):
                         changed=True,
                         msg=f"Workspace '{self.name}' created successfully",
                         workspace=self._format_workspace_output(response),
-                        api_response=response
+                        result=response
                     )
                 else:
                     # Update an existing workspace
@@ -527,19 +527,19 @@ class TerraformWorkspaceModule(HCPTerraformModule):
                         changed=True,
                         msg=f"Workspace '{self.name}' updated successfully",
                         workspace=self._format_workspace_output(response),
-                        api_response=response
+                        result=response
                     )
             else:  # state == 'absent'
                 if workspace:
                     # Delete the workspace
                     result = self._delete_workspace()
-                    self.exit_json(**result, api_response={"deleted": True})
+                    self.exit_json(**result, result={"deleted": True})
                 else:
                     # Workspace already doesn't exist
                     self.exit_json(
                         changed=False,
                         msg=f"Workspace '{self.name}' already does not exist",
-                        api_response={"deleted": False}
+                        result={"deleted": False}
                     )
                     
         except Exception as e:
