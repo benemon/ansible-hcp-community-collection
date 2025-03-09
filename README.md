@@ -288,7 +288,7 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
 ```
 
 ```yaml
-- name: Create and Configure Terraform Cloud Workspace
+- name: Create and Configure HCP Terraform / Terraform Enterprise Workspace from scratch
   hosts: localhost
   connection: local
   gather_facts: false
