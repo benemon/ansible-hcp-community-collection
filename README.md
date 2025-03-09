@@ -285,6 +285,7 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
       auto_apply: true
       wait: true
     register: terraform_destroy
+```
 
 ```yaml
 - name: Create and Configure Terraform Cloud Workspace
