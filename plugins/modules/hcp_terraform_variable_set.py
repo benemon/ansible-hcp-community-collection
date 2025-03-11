@@ -8,13 +8,18 @@ description:
     - Supports global, project-specific, and workspace-specific variable sets
     - Allows adding, updating, and removing variables within a set
 author: 
-    - Benjamin Holmes (@benemon)
+    - benemon
 options:
     token:
         description: HCP Terraform API token
         required: true
         type: str
         no_log: true
+    hostname:
+        description: Hostname for the Terraform API (defaults to app.terraform.io)
+        required: false
+        type: str
+        default: "https://app.terraform.io"
     organization:
         description: Name of the organization managing the variable set
         required: true
@@ -33,11 +38,12 @@ options:
         type: str
         choices: ['present', 'absent']
         default: 'present'
-    global:
+    global_set:
         description: Apply the variable set to all workspaces in the organization
         required: false
         type: bool
         default: false
+        aliases: ['global']
     priority:
         description: Variable set overrides other variable values
         required: false
@@ -60,6 +66,7 @@ options:
         required: false
         type: list
         elements: dict
+        default: []
         suboptions:
             key:
                 description: Name of the variable
@@ -69,6 +76,7 @@ options:
                 description: Value of the variable
                 required: true
                 type: str
+                no_log: false
             description:
                 description: Description of the variable
                 required: false
@@ -113,6 +121,62 @@ EXAMPLES = r'''
       - key: db_password
         value: "{{ vault_db_password }}"
         sensitive: true
+        category: env
+
+- name: Create a variable set with HCL variables
+  benemon.hcp_community_collection.hcp_terraform_variable_set:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    organization: my-org
+    name: complex-vars
+    variables:
+      - key: allowed_cidrs
+        value: '["10.0.0.0/16", "192.168.1.0/24"]'
+        hcl: true
+
+- name: Create a high-priority variable set
+  benemon.hcp_community_collection.hcp_terraform_variable_set:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    organization: my-org
+    name: override-configs
+    priority: true
+    workspace_ids:
+      - ws-abc123
+      - ws-def456
+    variables:
+      - key: environment
+        value: production
+
+- name: Assign an existing variable set to workspaces
+  benemon.hcp_community_collection.hcp_terraform_variable_set:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    organization: my-org
+    name: existing-varset
+    workspace_ids:
+      - ws-new123
+      - ws-new456
+    state: present
+
+- name: Assign an existing variable set to projects
+  benemon.hcp_community_collection.hcp_terraform_variable_set:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    organization: my-org
+    name: existing-varset
+    project_ids:
+      - prj-new123
+      - prj-new456
+    state: present
+
+- name: Update variables in an existing variable set
+  benemon.hcp_community_collection.hcp_terraform_variable_set:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    organization: my-org
+    name: existing-varset
+    variables:
+      - key: region
+        value: eu-west-1
+      - key: instance_type
+        value: t3.medium
+    state: present
 
 - name: Remove a variable set
   benemon.hcp_community_collection.hcp_terraform_variable_set:
@@ -131,31 +195,61 @@ variable_set:
         id:
             description: Unique identifier of the variable set
             type: str
+            sample: "varset-h8MZZgGQTN94qGNR"
         name:
             description: Name of the variable set
             type: str
+            sample: "global-configs"
         description:
             description: Description of the variable set
             type: str
+            sample: "Global configuration variables"
         global:
             description: Whether the set applies to all workspaces
             type: bool
+            sample: true
         priority:
             description: Whether the set takes precedence
             type: bool
+            sample: false
         variables:
             description: List of variables in the set
             type: list
+            elements: dict
+            contains:
+                key:
+                    description: Variable name
+                    type: str
+                    sample: "region"
+                category:
+                    description: Variable category
+                    type: str
+                    sample: "terraform"
+                sensitive:
+                    description: Whether the variable is sensitive
+                    type: bool
+                    sample: false
         project_ids:
             description: Projects to which the set is assigned
             type: list
+            elements: str
+            sample: ["prj-abc123", "prj-def456"]
         workspace_ids:
             description: Workspaces to which the set is assigned
             type: list
+            elements: str
+            sample: ["ws-abc123", "ws-def456"]
 result:
     description: Raw API response
     returned: always
     type: dict
+    contains:
+        data:
+            description: Variable set data
+            type: dict
+        included:
+            description: Related resources such as variables
+            type: list
 '''
 
 from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.hcp_terraform_module import HCPTerraformModule

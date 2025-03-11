@@ -108,30 +108,26 @@ def mock_hostname():
 
 # Test successful project lookup
 def test_projects_lookup_success(lookup_instance, mock_make_request, mock_auth_token, mock_hostname):
-    # Setup variables with all required parameters
     variables = {"organization": "my-org"}
     result = lookup_instance.run([], variables)
     
-    # Verify the result
     assert isinstance(result, list)
     assert len(result) == 1
     assert result[0] == PROJECTS_RESPONSE
     
-    # Verify the _make_request call
     mock_make_request.assert_called_once_with('GET', 'organizations/my-org/projects', variables, {})
 
-# Test project lookup with name filter
+# Test project lookup with client-side name filter
 def test_projects_lookup_with_name_filter(lookup_instance, mock_make_request, mock_auth_token, mock_hostname):
     variables = {"organization": "my-org", "name": "Project 1"}
     result = lookup_instance.run([], variables)
     
-    # Verify the result
     assert isinstance(result, list)
     assert len(result) == 1
+    # Verify that only the project with the exact name "Project 1" is returned
     assert result[0]["data"][0]["attributes"]["name"] == "Project 1"
     assert len(result[0]["data"]) == 1
     
-    # Verify the _make_request call
     mock_make_request.assert_called_once_with('GET', 'organizations/my-org/projects', variables, {})
 
 # Test missing required parameters
@@ -140,12 +136,10 @@ def test_projects_lookup_missing_params(lookup_instance, mock_auth_token, mock_h
         variables = {}
         lookup_instance.run([], variables)
     
-    # Verify the error message
     assert "Missing required parameter: organization" in str(excinfo.value)
 
-# Test error handling
+# Test error handling when the API call fails
 def test_projects_lookup_api_error(lookup_instance, mock_auth_token, mock_hostname):
-    # Mock _make_request to raise an exception
     with patch.object(LookupModule, '_make_request') as mock:
         mock.side_effect = Exception("API Error")
         
@@ -153,63 +147,51 @@ def test_projects_lookup_api_error(lookup_instance, mock_auth_token, mock_hostna
             variables = {"organization": "my-org"}
             lookup_instance.run([], variables)
         
-        # Verify the error message contains our API error
         assert "API Error" in str(excinfo.value)
 
 # Test parsing parameters from terms
 def test_projects_lookup_parse_terms(lookup_instance, mock_make_request, mock_auth_token, mock_hostname):
-    # Mock the _parse_parameters method to return our desired values
     with patch.object(LookupModule, '_parse_parameters') as mock_parse:
         mock_parse.return_value = {"organization": "my-org"}
         
         result = lookup_instance.run(["organization=my-org"], {})
         
-        # Verify the result
         assert isinstance(result, list)
         assert len(result) == 1
         
-        # Verify the _make_request call
         mock_make_request.assert_called_once_with('GET', 'organizations/my-org/projects', {"organization": "my-org"}, {})
 
 # Test pagination handling
 def test_projects_lookup_pagination(lookup_instance, mock_auth_token, mock_hostname):
-    # Create a paginated response
-    page1 = {
-        "data": [PROJECTS_RESPONSE["data"][0]],
-        "meta": {
-            "pagination": {
-                "current-page": 1,
-                "next-page": 2,
-                "total-pages": 2
-            }
-        }
-    }
-    
-    page2 = {
-        "data": [PROJECTS_RESPONSE["data"][1]],
-        "meta": {
-            "pagination": {
-                "current-page": 2,
-                "next-page": None,
-                "total-pages": 2
-            }
-        }
-    }
-    
-    # Mock _handle_pagination to return combined data
     with patch.object(LookupModule, '_handle_pagination') as mock:
         mock.return_value = PROJECTS_RESPONSE
         
         variables = {"organization": "my-org"}
         result = lookup_instance.run([], variables)
         
-        # Verify the result
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0] == PROJECTS_RESPONSE
         
-        # Verify the _handle_pagination call
         mock.assert_called_once_with('organizations/my-org/projects', variables, {})
+
+# New test: Verify that the q parameter is passed for server-side filtering
+def test_projects_lookup_with_q_parameter(lookup_instance, mock_auth_token, mock_hostname):
+    with patch.object(LookupModule, '_handle_pagination') as mock_pagination:
+        mock_pagination.return_value = PROJECTS_RESPONSE
+        variables = {"organization": "my-org", "q": "Project"}
+        result = lookup_instance.run([], variables)
+        
+        # Assert that the q parameter is passed correctly in the query parameters
+        mock_pagination.assert_called_once_with(
+            'organizations/my-org/projects', 
+            variables, 
+            {"q": "Project"}
+        )
+        
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0] == PROJECTS_RESPONSE
 
 # Ensure lookup plugin is properly registered and can be loaded
 def test_plugin_registered():

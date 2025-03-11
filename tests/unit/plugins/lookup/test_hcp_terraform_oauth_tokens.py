@@ -165,7 +165,7 @@ def test_run_missing_required_params(lookup):
         with pytest.raises(AnsibleError) as exc:
             lookup.run([])  # Missing oauth_client_id
             
-        assert 'Missing required parameter: oauth_client_id' in str(exc.value)
+        assert 'Either oauth_token_id or oauth_client_id must be provided.' in str(exc.value)
 
 def test_run_missing_token(lookup):
     """Test error handling for missing token"""
@@ -323,4 +323,33 @@ def test_rate_limit_handling(lookup):
             mock_sleep.assert_called_once_with(2.0)
             
             # Verify we got results after retry
+            assert result[0]['data'][0]['id'] == 'ot-hmAyP66qk2AMVdbJ'
+
+def test_run_with_token_id(lookup):
+    """Test retrieving a specific OAuth token using the Show endpoint."""
+    with patch.dict('os.environ', {'TFE_TOKEN': 'test-token'}):
+        with patch('ansible_collections.benemon.hcp_community_collection.plugins.module_utils.hcp_terraform_lookup.requests.request') as mock_request:
+            # Set up the mock response (reusing our MOCK_OAUTH_TOKENS_RESPONSE)
+            mock = MagicMock()
+            mock.json.return_value = MOCK_OAUTH_TOKENS_RESPONSE
+            mock.text = 'mock response'
+            mock.status_code = 200
+            mock_request.return_value = mock
+            
+            # Call lookup with oauth_token_id instead of oauth_client_id
+            result = lookup.run(['oauth_token_id=ot-hmAyP66qk2AMVdbJ'])
+            
+            # The expected URL uses the Show endpoint
+            expected_url = 'https://app.terraform.io/api/v2/oauth-tokens/ot-hmAyP66qk2AMVdbJ'
+            expected_call = call(
+                'GET',
+                expected_url,
+                headers={'Authorization': 'Bearer test-token', 'Content-Type': 'application/vnd.api+json'},
+                params=None
+            )
+            assert mock_request.call_args == expected_call
+            
+            # Verify that the returned result contains the expected token data
+            assert isinstance(result, list)
+            assert 'data' in result[0]
             assert result[0]['data'][0]['id'] == 'ot-hmAyP66qk2AMVdbJ'

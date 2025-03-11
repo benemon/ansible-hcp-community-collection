@@ -13,6 +13,7 @@ options:
     description: "HCP Terraform API token. This can be set via the TFE_TOKEN environment variable."
     required: true
     type: str
+    no_log: true
   hostname:
     description: "Hostname for the Terraform API (Terraform Cloud or Terraform Enterprise). This can be set via the TFE_HOSTNAME environment variable."
     required: false
@@ -43,7 +44,7 @@ options:
     type: bool
     default: false
   variables:
-    description: "Key-value pairs of input variables for the run."
+    description: "Key-value pairs of input variables for the run. Each item will be converted to a terraform variable."
     required: false
     type: dict
     default: {}
@@ -80,6 +81,30 @@ EXAMPLES = """
     workspace_id: "ws-abc123"
     plan_only: true
     wait: false
+    
+- name: Run with variables
+  benemon.hcp_community_collection.hcp_terraform_run:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    workspace_id: "ws-abc123"
+    variables:
+      region: "us-west-2"
+      instance_type: "t3.micro"
+
+- name: Destroy run with auto-apply
+  benemon.hcp_community_collection.hcp_terraform_run:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    workspace_id: "ws-abc123"
+    message: "Destroying infrastructure"
+    is_destroy: true
+    auto_apply: true
+
+- name: Run targeting specific resources
+  benemon.hcp_community_collection.hcp_terraform_run:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    workspace_id: "ws-abc123"
+    targets:
+      - "aws_instance.web"
+      - "aws_security_group.allow_http"
 """
 
 RETURN = """
@@ -87,14 +112,53 @@ run_id:
   description: "The ID of the triggered run."
   returned: always
   type: str
+  sample: "run-CZcmD7eagjhyX111"
 status:
   description: "The final status of the run (only if wait=True)."
   returned: when wait=True
   type: str
+  sample: "applied"
 result:
   description: "Raw API response from Terraform."
   returned: always
   type: dict
+  contains:
+    data:
+      description: "Information about the run."
+      type: dict
+      contains:
+        id:
+          description: "The run ID."
+          type: str
+          sample: "run-CZcmD7eagjhyX111"
+        attributes:
+          description: "Run attributes."
+          type: dict
+          contains:
+            status:
+              description: "Current status of the run."
+              type: str
+              sample: "planned_and_finished"
+            message:
+              description: "Run message."
+              type: str
+              sample: "Triggered by Ansible"
+            is-destroy:
+              description: "Whether this is a destroy run."
+              type: bool
+              sample: false
+            auto-apply:
+              description: "Whether auto-apply is enabled."
+              type: bool
+              sample: true
+            plan-only: 
+              description: "Whether this is a plan-only run."
+              type: bool
+              sample: false
+            created-at:
+              description: "When the run was created."
+              type: str
+              sample: "2023-05-15T18:24:16.591Z"
 """
 
 from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.hcp_terraform_module import HCPTerraformModule

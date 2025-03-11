@@ -13,6 +13,7 @@ options:
     description: "HCP Terraform API token. This can be set via the TFE_TOKEN environment variable."
     required: true
     type: str
+    no_log: true
   hostname:
     description: "Hostname for the Terraform API (Terraform Cloud or Terraform Enterprise). This can be set via the TFE_HOSTNAME environment variable."
     required: false
@@ -157,6 +158,26 @@ EXAMPLES = """
     organization: "my-organization"
     name: "workspace-to-remove"
     state: "absent"
+
+- name: Create a workspace with custom Terraform version and working directory
+  benemon.hcp_community_collection.hcp_terraform_workspace:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    organization: "my-organization"
+    name: "advanced-workspace"
+    terraform_version: "1.4.6"
+    working_directory: "/terraform/environments/prod"
+    speculative_enabled: false
+    global_remote_state: true
+
+- name: Create workspace with tag filtering for VCS
+  benemon.hcp_community_collection.hcp_terraform_workspace:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    organization: "my-organization"
+    name: "tagged-releases-workspace"
+    vcs_repo:
+      oauth_token_id: "ot-abcdefg123456"
+      identifier: "my-org/my-repo"
+      tags_regex: "v\\d+\\.\\d+\\.\\d+"
 """
 
 RETURN = """
@@ -168,34 +189,85 @@ workspace:
     id:
       description: "The ID of the workspace."
       type: str
+      sample: "ws-4j8p6jX1w33MiDC7"
     name:
       description: "The name of the workspace."
       type: str
+      sample: "my-workspace"
     description:
       description: "The description of the workspace."
       type: str
+      sample: "Created with Ansible"
     organization:
       description: "The name of the organization."
       type: str
+      sample: "my-organization"
     execution_mode:
       description: "The execution mode of the workspace."
       type: str
+      sample: "remote"
     terraform_version:
       description: "The Terraform version of the workspace."
       type: str
+      sample: "1.5.7"
     working_directory:
       description: "The working directory of the workspace."
       type: str
+      sample: "/terraform"
     auto_apply:
       description: "Whether auto apply is enabled."
       type: bool
+      sample: false
+    created_at:
+      description: "When the workspace was created."
+      type: str
+      sample: "2023-05-15T18:24:16.591Z"
+    updated_at:
+      description: "When the workspace was last updated."
+      type: str
+      sample: "2023-05-15T18:24:16.591Z"
     vcs_repo:
       description: "The VCS repository configuration."
       type: dict
+      contains:
+        identifier:
+          description: "The repository identifier."
+          type: str
+          sample: "username/repo"
+        branch:
+          description: "The repository branch."
+          type: str
+          sample: "main"
+        ingress_submodules:
+          description: "Whether submodules are cloned."
+          type: bool
+          sample: false
+        oauth_token_id:
+          description: "The OAuth token ID used."
+          type: str
+          sample: "ot-abcdefg123456"
+    project_id:
+      description: "The ID of the project the workspace belongs to."
+      type: str
+      sample: "prj-1234abcd"
 result:
   description: "Raw API response from HCP Terraform."
   returned: always
   type: dict
+  contains:
+    data:
+      description: "Information about the workspace."
+      type: dict
+      contains:
+        id:
+          description: "The workspace ID."
+          type: str
+        attributes:
+          description: "Workspace attributes."
+          type: dict
+        relationships:
+          description: "Associated resources."
+          type: dict
 """
 
 from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.hcp_terraform_module import HCPTerraformModule

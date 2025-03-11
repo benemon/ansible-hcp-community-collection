@@ -4,23 +4,23 @@ DOCUMENTATION = r"""
     version_added: "0.0.7"
     short_description: List variable sets from HCP Terraform
     description:
-        - This lookup returns variable sets from HCP Terraform
-        - Variable sets allow reusing variables across multiple workspaces and projects
-        - Results can be filtered by organization, project, or workspace
+        - This lookup returns variable sets from HCP Terraform.
+        - Variable sets allow reusing variables across multiple workspaces and projects.
+        - Results can be filtered by organization, project, or workspace.
     options:
         token:
             description:
-                - HCP Terraform API token
-                - Can be specified via TFE_TOKEN environment variable
+                - HCP Terraform API token.
+                - Can be specified via TFE_TOKEN environment variable.
             required: true
             type: str
             env:
                 - name: TFE_TOKEN
         hostname:
             description:
-                - HCP Terraform API hostname
-                - Can be specified via TFE_HOSTNAME environment variable
-                - Defaults to https://app.terraform.io
+                - HCP Terraform API hostname.
+                - Can be specified via TFE_HOSTNAME environment variable.
+                - Defaults to https://app.terraform.io.
             required: false
             type: str
             default: "https://app.terraform.io"
@@ -28,63 +28,63 @@ DOCUMENTATION = r"""
                 - name: TFE_HOSTNAME
         organization:
             description:
-                - Name of the organization to list variable sets for
-                - Required if listing organization-scoped variable sets
+                - Name of the organization to list variable sets for.
+                - Required if listing organization-scoped variable sets.
             required: false
             type: str
         project_id:
             description:
-                - ID of the project to list variable sets for
-                - If specified, returns variable sets for this project
+                - ID of the project to list variable sets for.
+                - If specified, returns variable sets for this project.
             required: false
             type: str
         workspace_id:
             description:
-                - ID of the workspace to list variable sets for
-                - If specified, returns variable sets for this workspace
+                - ID of the workspace to list variable sets for.
+                - If specified, returns variable sets for this workspace.
             required: false
             type: str
         page_size:
             description: 
-                - Number of results to return per page
-                - Default is determined by the API
+                - Number of results to return per page.
+                - Default is determined by the API.
             required: false
             type: int
         max_pages:
             description:
-                - Maximum number of pages to retrieve
-                - If not specified, all pages will be retrieved
+                - Maximum number of pages to retrieve.
+                - If not specified, all pages will be retrieved.
             required: false
             type: int
         disable_pagination:
             description: 
-                - If True, returns only the first page of results
+                - If True, returns only the first page of results.
             required: false
             type: bool
             default: false
         name:
             description:
-                - Filter variable sets by name (case-sensitive)
-                - This is a client-side filter applied after retrieving results
+                - Filter variable sets by name (case-sensitive).
+                - This is a client-side filter applied after retrieving results.
             required: false
             type: str
         id:
             description:
-                - Fetch a specific variable set by ID
-                - If specified, other filters are ignored
+                - Fetch a specific variable set by ID.
+                - If specified, other filters are ignored.
             required: false
             type: str
         q:
             description:
-                - Search query to filter variable sets
-                - This is passed directly to the API as a query parameter
+                - Search query to filter variable sets.
+                - This is passed directly to the API as a query parameter.
             required: false
             type: str
     notes:
-        - Authentication requires a valid HCP Terraform API token
-        - One of organization, project_id, workspace_id, or id must be specified
-        - Variable sets can be scoped to an organization, project, or workspace
-        - Returns raw API response from HCP Terraform
+        - Authentication requires a valid HCP Terraform API token.
+        - One of organization, project_id, workspace_id, or id must be specified.
+        - Variable sets can be scoped to an organization, project, or workspace.
+        - Returns raw API response from HCP Terraform.
     seealso:
         - module: benemon.hcp_community_collection.hcp_terraform_variable_set
         - name: Terraform API Documentation
@@ -138,6 +138,100 @@ EXAMPLES = r"""
                 map('combine', {'name': item.attributes.name, 'id': item.id}) | list }}"
   vars:
     item: "{{ item }}"
+
+# Assign a variable set to a workspace
+- name: Get variable set ID by name
+  ansible.builtin.set_fact:
+    varset_id: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_variable_sets',
+                 organization='my-organization',
+                 name='Production Credentials').data[0].id }}"
+
+- name: Assign variable set to a new workspace
+  benemon.hcp_community_collection.hcp_terraform_variable_set:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    organization: my-organization
+    name: "Production Credentials"
+    workspace_ids:
+      - ws-new123
+    state: present
+"""
+
+RETURN = r"""
+  _raw:
+    description: Raw API response from HCP Terraform containing variable set information.
+    type: dict
+    contains:
+      data:
+        description: List of variable set objects or a single variable set object if id is specified.
+        type: list or dict
+        elements: dict
+        contains:
+          id:
+            description: The ID of the variable set.
+            type: str
+            sample: "varset-h8MZZgGQTN94qGNR"
+          type:
+            description: The type of resource (always 'varsets').
+            type: str
+            sample: "varsets"
+          attributes:
+            description: Variable set attributes.
+            type: dict
+            contains:
+              name:
+                description: The name of the variable set.
+                type: str
+                sample: "Production Credentials"
+              description:
+                description: The description of the variable set.
+                type: str
+                sample: "Variables for production environments"
+              global:
+                description: Whether the set applies to all workspaces.
+                type: bool
+                sample: false
+              priority:
+                description: Whether the set takes precedence.
+                type: bool
+                sample: true
+              updated-at:
+                description: When the variable set was last updated.
+                type: str
+                sample: "2023-05-15T18:24:16.591Z"
+              var-count:
+                description: Number of variables in the set.
+                type: int
+                sample: 5
+              workspace-count:
+                description: Number of workspaces the set is assigned to.
+                type: int
+                sample: 3
+              project-count:
+                description: Number of projects the set is assigned to.
+                type: int
+                sample: 2
+          relationships:
+            description: Related resources.
+            type: dict
+            contains:
+              organization:
+                description: The organization this variable set belongs to.
+                type: dict
+              vars:
+                description: Variables in this set.
+                type: dict
+              workspaces:
+                description: Workspaces this set is assigned to.
+                type: dict
+              projects:
+                description: Projects this set is assigned to.
+                type: dict
+      links:
+        description: Pagination links (if applicable).
+        type: dict
+      meta:
+        description: Metadata about the response (if applicable).
+        type: dict
 """
 
 from ansible.errors import AnsibleError

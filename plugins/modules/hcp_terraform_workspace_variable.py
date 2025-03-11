@@ -13,6 +13,7 @@ options:
     description: "HCP Terraform API token. This can be set via the TFE_TOKEN environment variable."
     required: true
     type: str
+    no_log: true
   hostname:
     description: "Hostname for the Terraform API (Terraform Cloud or Terraform Enterprise). This can be set via the TFE_HOSTNAME environment variable."
     required: false
@@ -60,7 +61,7 @@ options:
 
 EXAMPLES = """
 - name: Create a Terraform variable
-  benemon.hcp_community_collection.hcp_terraform_variable:
+  benemon.hcp_community_collection.hcp_terraform_workspace_variable:
     token: "{{ lookup('env', 'TFE_TOKEN') }}"
     workspace_id: "ws-abcdefg123456"
     key: "instance_type"
@@ -68,7 +69,7 @@ EXAMPLES = """
     description: "EC2 instance type"
     
 - name: Create a sensitive environment variable
-  benemon.hcp_community_collection.hcp_terraform_variable:
+  benemon.hcp_community_collection.hcp_terraform_workspace_variable:
     token: "{{ lookup('env', 'TFE_TOKEN') }}"
     workspace_id: "ws-abcdefg123456"
     key: "AWS_SECRET_ACCESS_KEY"
@@ -77,7 +78,7 @@ EXAMPLES = """
     sensitive: true
     
 - name: Create a variable with HCL value
-  benemon.hcp_community_collection.hcp_terraform_variable:
+  benemon.hcp_community_collection.hcp_terraform_workspace_variable:
     token: "{{ lookup('env', 'TFE_TOKEN') }}"
     workspace_id: "ws-abcdefg123456"
     key: "allowed_cidrs"
@@ -85,18 +86,40 @@ EXAMPLES = """
     hcl: true
     
 - name: Update an existing variable
-  benemon.hcp_community_collection.hcp_terraform_variable:
+  benemon.hcp_community_collection.hcp_terraform_workspace_variable:
     token: "{{ lookup('env', 'TFE_TOKEN') }}"
     workspace_id: "ws-abcdefg123456"
     key: "instance_type"
     value: "t3.large"
     
 - name: Delete a variable
-  benemon.hcp_community_collection.hcp_terraform_variable:
+  benemon.hcp_community_collection.hcp_terraform_workspace_variable:
     token: "{{ lookup('env', 'TFE_TOKEN') }}"
     workspace_id: "ws-abcdefg123456"
     key: "region"
     state: "absent"
+
+- name: Create multiple variables in the same workspace
+  benemon.hcp_community_collection.hcp_terraform_workspace_variable:
+    token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    workspace_id: "ws-abcdefg123456"
+    key: "{{ item.key }}"
+    value: "{{ item.value }}"
+    category: "{{ item.category | default('terraform') }}"
+    description: "{{ item.description | default(omit) }}"
+    sensitive: "{{ item.sensitive | default(false) }}"
+  loop:
+    - key: region
+      value: us-east-1
+      description: AWS region
+    - key: AWS_ACCESS_KEY_ID
+      value: "{{ aws_access_key }}"
+      category: env
+      sensitive: true
+    - key: AWS_SECRET_ACCESS_KEY
+      value: "{{ aws_secret_key }}"
+      category: env
+      sensitive: true
 """
 
 RETURN = """
@@ -108,31 +131,72 @@ variable:
     id:
       description: "The ID of the variable."
       type: str
+      sample: "var-EavQ1LztoRTQHSNT"
     key:
       description: "The name of the variable."
       type: str
+      sample: "instance_type"
     value:
       description: "The value of the variable (omitted for sensitive variables)."
       type: str
+      sample: "t3.micro"
     description:
       description: "The description of the variable."
       type: str
+      sample: "EC2 instance type"
     category:
       description: "The category of the variable (terraform or env)."
       type: str
+      sample: "terraform"
     hcl:
       description: "Whether the variable is evaluated as HCL."
       type: bool
+      sample: false
     sensitive:
       description: "Whether the variable is sensitive."
       type: bool
+      sample: false
     workspace_id:
       description: "The ID of the workspace."
       type: str
+      sample: "ws-4j8p6jX1w33MiDC7"
 result:
   description: "Raw API response from HCP Terraform."
   returned: always
   type: dict
+  contains:
+    data:
+      description: "Information about the variable."
+      type: dict
+      contains:
+        id:
+          description: "The variable ID."
+          type: str
+          sample: "var-EavQ1LztoRTQHSNT"
+        attributes:
+          description: "Variable attributes."
+          type: dict
+          contains:
+            key:
+              description: "Variable name."
+              type: str
+              sample: "instance_type"
+            value:
+              description: "Variable value (omitted for sensitive variables)."
+              type: str
+              sample: "t3.micro"
+            sensitive:
+              description: "Whether the variable is sensitive."
+              type: bool
+              sample: false
+            category:
+              description: "Variable category (terraform or env)."
+              type: str
+              sample: "terraform"
+            hcl:
+              description: "Whether the variable is HCL formatted."
+              type: bool
+              sample: false
 """
 
 from ansible_collections.benemon.hcp_community_collection.plugins.module_utils.hcp_terraform_module import HCPTerraformModule

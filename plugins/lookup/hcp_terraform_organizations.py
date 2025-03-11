@@ -1,13 +1,13 @@
 #!/usr/bin/python
 DOCUMENTATION = r"""
-    name: hcp_terraform_projects
+    name: hcp_terraform_organizations
     author: benemon
     version_added: "0.0.7"
-    short_description: List projects for HCP Terraform with server-side filtering
+    short_description: List organizations for HCP Terraform with server-side filtering
     description:
-        - This lookup returns projects from HCP Terraform.
-        - Projects are used to organize workspaces within organizations.
-        - Results can be filtered by organization and further refined using the 'q' parameter, which is passed directly to the API for server-side filtering.
+        - This lookup returns organizations from HCP Terraform.
+        - Organizations are the top-level resource that contain projects and workspaces.
+        - Results can be filtered using the 'q' parameter for server-side filtering.
     options:
         token:
             description:
@@ -27,12 +27,6 @@ DOCUMENTATION = r"""
             default: "https://app.terraform.io"
             env:
                 - name: TFE_HOSTNAME
-        organization:
-            description:
-                - Name of the organization to filter projects for.
-                - Required to list projects for a specific organization.
-            required: true
-            type: str
         page_size:
             description: 
                 - Number of results to return per page.
@@ -51,125 +45,134 @@ DOCUMENTATION = r"""
             required: false
             type: bool
             default: false
-        name:
-            description:
-                - Client-side filter to return only projects with an exact matching name (case-sensitive).
-            required: false
-            type: str
         q:
             description:
-                - Server-side search query to filter projects.
+                - Server-side search query to filter organizations.
                 - This query is passed directly to the API endpoint for filtering.
+            required: false
+            type: str
+        q_name:
+            description:
+                - Filter organizations by name. Shorthand for q[name].
+                - Provides server-side filtering based on the name attribute.
+            required: false
+            type: str
+        q_email:
+            description:
+                - Filter organizations by email. Shorthand for q[email].
+                - Provides server-side filtering based on the email attribute.
+            required: false
+            type: str
+        name:
+            description:
+                - Client-side filter to return only organizations with an exact matching name (case-sensitive).
             required: false
             type: str
     notes:
         - Authentication requires a valid HCP Terraform API token.
-        - Projects are organization-specific.
         - Returns raw API response from HCP Terraform.
     seealso:
-        - module: benemon.hcp_community_collection.hcp_terraform_workspace
+        - module: benemon.hcp_community_collection.hcp_terraform_organization
         - name: Terraform API Documentation
-          link: https://developer.hashicorp.com/terraform/cloud-docs/api-docs/projects
+          link: https://developer.hashicorp.com/terraform/cloud-docs/api-docs/organizations
 """
 
 EXAMPLES = r"""
-# List all projects for an organization
-- name: Get projects for an organization
+# List all organizations
+- name: Get all organizations
   ansible.builtin.debug:
-    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_projects', organization='my-organization') }}"
+    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_organizations') }}"
 
-# List projects using server-side filtering with a search query
-- name: Get projects using server-side filtering
+# List organizations using server-side filtering with a search query
+- name: Get organizations using server-side filtering
   ansible.builtin.debug:
-    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_projects', 
+    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_organizations', 
             token='your_terraform_token',
             hostname='https://app.terraform.io',
-            organization='my-organization',
             q='terraform') }}"
 
-# Get project ID by filtering with a client-side name filter
-- name: Get project ID for a project with an exact name
+# Get organization by filtering with a client-side name filter
+- name: Get organization with an exact name
   ansible.builtin.set_fact:
-    project_id: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_projects',
-                  organization='my-organization',
-                  name='My Project')._raw.data | 
-                  selectattr('attributes.name', 'equalto', 'My Project') | 
-                  map(attribute='id') | first }}"
+    organization_id: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_organizations',
+                    name='My Organization')._raw.data | 
+                    selectattr('attributes.name', 'equalto', 'My Organization') | 
+                    map(attribute='id') | first }}"
 
-- name: Create a workspace in the specified project
-  benemon.hcp_community_collection.hcp_terraform_workspace:
-    name: "new-workspace"
-    organization: "my-organization"
-    project_id: "{{ project_id }}"
+# Filter organizations by email domain using server-side filtering
+- name: Get organizations with a specific email domain
+  ansible.builtin.debug:
+    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_organizations',
+            q_email='@example.com') }}"
 
-# Extract specific fields using a comprehension and a server-side query
-- name: Get a list of project names and IDs
+# Extract specific fields using a comprehension
+- name: Get a list of organization names and IDs
   ansible.builtin.set_fact:
-    projects: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_projects',
-                organization='my-organization',
-                q='terraform')._raw.data | 
+    organizations: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_organizations')._raw.data | 
                 map('combine', {'name': item.attributes.name, 'id': item.id}) | list }}"
   vars:
     item: "{{ item }}"
 
 # Limit number of results using pagination controls
-- name: Get first page with 5 projects per page
+- name: Get first page with 5 organizations per page
   ansible.builtin.debug:
-    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_projects',
-            organization='my-organization',
+    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_organizations',
             page_size=5,
             disable_pagination=true) }}"
 """
 
 RETURN = r"""
   _raw:
-    description: Raw API response from HCP Terraform containing project information.
+    description: Raw API response from HCP Terraform containing organization information.
     type: dict
     contains:
       data:
-        description: List of project objects.
+        description: List of organization objects.
         type: list
         elements: dict
         contains:
           id:
-            description: The ID of the project.
+            description: The ID of the organization.
             type: str
-            sample: "prj-jT92VLSFpv8FwKtc"
+            sample: "my-organization"
           type:
-            description: The type of resource (always 'projects').
+            description: The type of resource (always 'organizations').
             type: str
-            sample: "projects"
+            sample: "organizations"
           attributes:
-            description: Project attributes.
+            description: Organization attributes.
             type: dict
             contains:
               name:
-                description: The name of the project.
+                description: The name of the organization.
                 type: str
-                sample: "AWS Infrastructure"
+                sample: "My Organization"
+              email:
+                description: The email address of the organization.
+                type: str
+                sample: "admin@example.com"
               created-at:
-                description: When the project was created.
+                description: When the organization was created.
                 type: str
                 sample: "2023-05-15T18:24:16.591Z"
               permissions:
-                description: User permissions for this project.
+                description: User permissions for this organization.
                 type: dict
-                sample: {"can-update": true, "can-destroy": true, "can-create-workspace": true}
+              collaborator-auth-policy:
+                description: The auth policy (password or two_factor_mandatory).
+                type: str
+                sample: "password"
           relationships:
             description: Related resources.
             type: dict
-            contains:
-              organization:
-                description: The organization this project belongs to.
-                type: dict
           links:
-            description: URL links related to this project.
+            description: URL links related to this organization.
             type: dict
-            sample: {"self": "/api/v2/projects/prj-jT92VLSFpv8FwKtc"}
+            sample: {"self": "/api/v2/organizations/my-organization"}
       links:
         description: Pagination links (if applicable).
         type: dict
-        sample: {"self": "/api/v2/organizations/my-organization/projects?page[number]=1&page[size]=20"}
+        sample: {"self": "/api/v2/organizations?page[number]=1&page[size]=20"}
       meta:
         description: Metadata about the response (if applicable).
         type: dict
@@ -196,7 +199,7 @@ display = Display()
 
 class LookupModule(HCPTerraformLookup):
     def run(self, terms, variables=None, **kwargs):
-        """Retrieve projects from HCP Terraform."""
+        """Retrieve organizations from HCP Terraform."""
         variables = variables or {}
         
         # Process parameters
@@ -205,23 +208,25 @@ class LookupModule(HCPTerraformLookup):
         # Set hostname for base URL
         self.base_url = self._get_hostname(params)
         
-        # Validate required parameters
-        required_params = ['organization']
-        self._validate_params(params, required_params)
-        
-        # Build endpoint using the provided organization
-        organization = params['organization']
-        endpoint = f"organizations/{organization}/projects"
-        
-        display.vvv(f"Looking up projects for organization {organization}")
+        display.vvv(f"Looking up organizations")
         
         try:
+            # Build endpoint for organizations
+            endpoint = "organizations"
+            
             # Build query parameters
             query_params = {}
             
             # Add server-side search query if provided
             if 'q' in params:
                 query_params['q'] = params['q']
+            
+            # Add specific filters if provided
+            if 'q_name' in params:
+                query_params['q[name]'] = params['q_name']
+                
+            if 'q_email' in params:
+                query_params['q[email]'] = params['q_email']
             
             # Retrieve client-side name filter if provided
             name_filter = params.get('name')
@@ -232,19 +237,19 @@ class LookupModule(HCPTerraformLookup):
             # Apply client-side name filtering if specified
             if name_filter and 'data' in results:
                 filtered_data = [
-                    project for project in results['data']
-                    if 'attributes' in project and 
-                    'name' in project['attributes'] and 
-                    project['attributes']['name'] == name_filter
+                    org for org in results['data']
+                    if 'attributes' in org and 
+                    'name' in org['attributes'] and 
+                    org['attributes']['name'] == name_filter
                 ]
                 results['data'] = filtered_data
             
             # Return the raw results, preserving the original structure
-            display.vvv("Successfully retrieved projects response")
+            display.vvv("Successfully retrieved organizations response")
             return [results]
         except Exception as e:
-            display.error(f"Error retrieving projects: {str(e)}")
-            raise AnsibleError(f"Error retrieving projects: {str(e)}")
+            display.error(f"Error retrieving organizations: {str(e)}")
+            raise AnsibleError(f"Error retrieving organizations: {str(e)}")
 
 if __name__ == '__main__':
     # For testing purposes, you can invoke the lookup module from the command line.
