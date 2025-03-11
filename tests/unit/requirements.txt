@@ -1,4 +1,4 @@
-ansible-core
+ansible
 pytest
 pytest-mock
 requests
