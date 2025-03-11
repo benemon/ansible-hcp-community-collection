@@ -67,6 +67,55 @@ DOCUMENTATION = r"""
             default: false
 """
 
+EXAMPLES = r"""
+# Get the current state version for a workspace
+- name: Get current state version
+  ansible.builtin.debug:
+    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_state_versions', 
+            organization='my-organization',
+            workspace_name='my-workspace',
+            get_current=true) }}"
+
+# Get a specific state version by ID
+- name: Get state version by ID
+  ansible.builtin.debug:
+    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_state_versions',
+            state_version_id='sv-abcd1234') }}"
+
+# List all state versions for a workspace
+- name: List all state versions
+  ansible.builtin.debug:
+    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_state_versions',
+            organization='my-organization',
+            workspace_name='my-workspace',
+            get_current=false) }}"
+
+# List only finalized state versions
+- name: List finalized state versions
+  ansible.builtin.debug:
+    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_state_versions',
+            organization='my-organization',
+            workspace_name='my-workspace',
+            get_current=false,
+            status='finalized') }}"
+            
+# Get state version with outputs included
+- name: Get current state version with outputs
+  ansible.builtin.debug:
+    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_state_versions',
+            organization='my-organization',
+            workspace_name='my-workspace',
+            include_outputs=true) }}"
+
+# Wait for state version processing to complete
+- name: Get state version and wait for processing
+  ansible.builtin.debug:
+    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_state_versions',
+            state_version_id='sv-abcd1234',
+            wait_for_processing=true,
+            wait_timeout=300) }}"
+"""
+
 RETURN = r"""
 _raw:
     description: State version information from HCP Terraform.
@@ -80,13 +129,75 @@ _raw:
                 id:
                     description: The ID of the state version.
                     type: str
-                    sample: sv-123456
+                    sample: "sv-123456"
                 type:
                     description: The type of the resource.
                     type: str
-                    sample: state-versions
+                    sample: "state-versions"
                 attributes:
                     description: Attributes of the state version.
+                    type: dict
+                    contains:
+                        created-at:
+                            description: When the state version was created.
+                            type: str
+                            sample: "2023-05-15T18:24:16.591Z"
+                        status:
+                            description: The status of the state version.
+                            type: str
+                            sample: "finalized"
+                        serial:
+                            description: The serial number of the state file.
+                            type: int
+                            sample: 1
+                        terraform-version:
+                            description: The Terraform version used.
+                            type: str
+                            sample: "1.5.0"
+                        resources-processed:
+                            description: Whether the resources have been processed.
+                            type: bool
+                            sample: true
+                        vcs-commit-url:
+                            description: URL to the commit that created this state version.
+                            type: str
+                            sample: "https://github.com/organization/repo/commit/abcdef123456"
+                relationships:
+                    description: Related resources.
+                    type: dict
+                    contains:
+                        run:
+                            description: The run that created this state version.
+                            type: dict
+                        created-by:
+                            description: The user who created this state version.
+                            type: dict
+                        workspace:
+                            description: The workspace this state version belongs to.
+                            type: dict
+                        outputs:
+                            description: The outputs from this state version.
+                            type: dict
+                        resources:
+                            description: The resources managed in this state version.
+                            type: dict
+                links:
+                    description: Links related to this state version.
+                    type: dict
+                    sample: {"self": "/api/v2/state-versions/sv-123456"}
+        included:
+            description: Related resources included in the response when using include parameters.
+            type: list
+            elements: dict
+            contains:
+                id:
+                    description: ID of the included resource.
+                    type: str
+                type:
+                    description: Type of the included resource.
+                    type: str
+                attributes:
+                    description: Attributes of the included resource.
                     type: dict
 """
 

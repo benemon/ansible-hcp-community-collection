@@ -218,7 +218,8 @@ def test_wait_for_processing(lookup_instance, mock_auth_token, mock_hostname):
             assert isinstance(result[0], dict)
             assert "vpc_id" in result[0]
             
-            mock_wait.assert_called_once_with("sv-123456", 120)
+            # Update to expect all three parameters, including the variables dictionary
+            mock_wait.assert_called_once_with("sv-123456", 120, variables)
 
 # Test error handling when output name not found
 def test_output_name_not_found(lookup_instance, mock_make_request, mock_auth_token, mock_hostname):

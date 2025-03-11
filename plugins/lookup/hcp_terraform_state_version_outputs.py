@@ -272,7 +272,7 @@ class LookupModule(HCPTerraformLookup):
             if 'state_version_id' in params:
                 # Check if we need to wait for processing
                 if params.get('wait_for_processing', False):
-                    self._wait_for_state_version_if_needed(params['state_version_id'], params.get('wait_timeout', 120))
+                    self._wait_for_state_version_if_needed(params['state_version_id'], params.get('wait_timeout', 120), params)
                 
                 # Get all outputs for a state version
                 result = self._get_outputs_by_state_version(params['state_version_id'], params)
@@ -281,8 +281,6 @@ class LookupModule(HCPTerraformLookup):
                 result = self._get_current_state_version_outputs(workspace_id, params)
             else:
                 raise AnsibleError("Either output_id, state_version_id, or workspace_id (or organization and workspace_name) must be provided.")
-        
-        
             
             # If a specific output name is requested, return just that output's value
             if 'output_name' in params and not params.get('raw_output', False):
@@ -325,7 +323,7 @@ class LookupModule(HCPTerraformLookup):
         """Get a specific output by ID."""
         try:
             endpoint = f"/state-version-outputs/{output_id}"
-            return self._make_request('GET', endpoint, variables={'token': self._get_auth_token({})})
+            return self._make_request('GET', endpoint, variables={'token': self._get_auth_token(params)})
         except Exception as e:
             raise AnsibleError(f"Error retrieving output {output_id}: {str(e)}")
 
@@ -336,7 +334,7 @@ class LookupModule(HCPTerraformLookup):
             
             # If we need to wait for processing, check the state version first
             if params.get('wait_for_processing', False):
-                self._wait_for_state_version_if_needed(state_version_id, params.get('wait_timeout', 120))
+                self._wait_for_state_version_if_needed(state_version_id, params.get('wait_timeout', 120), params)
             
             # Handle pagination for the outputs
             query_params = {}
@@ -356,7 +354,7 @@ class LookupModule(HCPTerraformLookup):
                     state_version_id = current_state_version['data']['id']
                     self._wait_for_state_version_if_needed(state_version_id, params.get('wait_timeout', 120), params)
             
-            # Handle pagination for the outputs - pass the params with token
+            # Handle pagination for the outputs
             query_params = {}
             return self._handle_pagination(endpoint, params, query_params)
         except Exception as e:
@@ -374,8 +372,9 @@ class LookupModule(HCPTerraformLookup):
                 return None
             raise AnsibleError(f"Error retrieving current state version for workspace {workspace_id}: {str(e)}")
     
-    def _wait_for_state_version_if_needed(self, state_version_id, timeout, params):
+    def _wait_for_state_version_if_needed(self, state_version_id, timeout, params=None):
         """Wait for a state version to be fully processed if it's not already."""
+        params = params or {}
         try:
             endpoint = f"/state-versions/{state_version_id}"
             state_version = self._make_request('GET', endpoint, variables={'token': self._get_auth_token(params)})
@@ -390,8 +389,9 @@ class LookupModule(HCPTerraformLookup):
         except Exception as e:
             raise AnsibleError(f"Error checking state version processing: {str(e)}")
 
-    def _wait_for_state_version_processing(self, state_version_id, timeout):
+    def _wait_for_state_version_processing(self, state_version_id, timeout, params=None):
         """Wait for a state version to be fully processed."""
+        params = params or {}
         start_time = time.time()
         
         display.vvv(f"Waiting for state version {state_version_id} processing to complete")
@@ -404,7 +404,7 @@ class LookupModule(HCPTerraformLookup):
             try:
                 # Get the state version
                 endpoint = f"/state-versions/{state_version_id}"
-                state_version = self._make_request('GET', endpoint, variables={'token': self._get_auth_token({})})
+                state_version = self._make_request('GET', endpoint, variables={'token': self._get_auth_token(params)})
                 
                 # Check if processing is complete
                 if state_version.get('data', {}).get('attributes', {}).get('resources-processed', False):
