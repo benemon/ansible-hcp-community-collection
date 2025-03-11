@@ -57,14 +57,14 @@ DOCUMENTATION = r"""
             required: false
             type: bool
             default: false
-notes:
-    - Authentication requires a valid HCP Terraform API token.
-    - Returns raw API response from HCP Terraform.
-seealso:
-    - module: benemon.hcp_community_collection.hcp_terraform_oauth_clients
-    - module: benemon.hcp_community_collection.hcp_terraform_state_versions
-    - name: Terraform API Documentation
-      link: https://developer.hashicorp.com/terraform/cloud-docs/api-docs/oauth-tokens
+    notes:
+        - Authentication requires a valid HCP Terraform API token.
+        - Returns raw API response from HCP Terraform.
+    seealso:
+        - module: benemon.hcp_community_collection.hcp_terraform_oauth_clients
+        - module: benemon.hcp_community_collection.hcp_terraform_state_versions
+        - name: Terraform API Documentation
+          link: https://developer.hashicorp.com/terraform/cloud-docs/api-docs/oauth-tokens
 """
 
 EXAMPLES = r"""
@@ -77,33 +77,84 @@ EXAMPLES = r"""
 - name: Get specific OAuth token
   ansible.builtin.debug:
     msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_oauth_tokens', oauth_token_id='ot-EXAMPLE') }}"
+
+# List OAuth tokens with explicit token and hostname
+- name: Get OAuth tokens with specific credentials
+  ansible.builtin.debug:
+    msg: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_oauth_tokens',
+            token='your_terraform_token', 
+            hostname='https://app.terraform.io',
+            oauth_client_id='oc-EXAMPLE') }}"
+
+# Use OAuth token in a workspace creation workflow
+- name: Get OAuth token ID for a GitHub connection
+  ansible.builtin.set_fact:
+    oauth_token: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_oauth_tokens', 
+                  oauth_client_id='oc-EXAMPLE').data | first }}"
+
+- name: Create workspace with VCS connection using the OAuth token
+  benemon.hcp_community_collection.hcp_terraform_workspace:
+    organization: "my-organization"
+    name: "new-workspace"
+    vcs_repo:
+      oauth_token_id: "{{ oauth_token.id }}"
+      identifier: "my-org/my-repo"
+      branch: "main"
 """
 
 RETURN = r"""
-_raw:
+  _raw:
     description: Raw API response from HCP Terraform containing OAuth token information.
     type: dict
     contains:
-        data:
-            description: OAuth token information.
-            type: list
-            elements: dict
-            contains:
-                id:
-                    description: The ID of the OAuth token.
-                    type: str
-                type:
-                    description: The type of resource (always 'oauth-tokens').
-                    type: str
-                attributes:
-                    description: Attributes of the OAuth token.
-                    type: dict
-                relationships:
-                    description: Related resources.
-                    type: dict
-        meta:
-            description: Pagination metadata.
+      data:
+        description: OAuth token information.
+        type: list
+        elements: dict
+        contains:
+          id:
+            description: The ID of the OAuth token.
+            type: str
+            sample: "ot-hmAyP66qk2AMVdbJ"
+          type:
+            description: The type of resource (always 'oauth-tokens').
+            type: str
+            sample: "oauth-tokens"
+          attributes:
+            description: Attributes of the OAuth token.
             type: dict
+            contains:
+              created-at:
+                description: When the token was created.
+                type: str
+                sample: "2017-11-02T06:37:49.284Z"
+              service-provider-user:
+                description: Username in the service provider.
+                type: str
+                sample: "username"
+              has-ssh-key:
+                description: Whether the token has an SSH key attached.
+                type: bool
+                sample: false
+          relationships:
+            description: Related resources.
+            type: dict
+            contains:
+              oauth-client:
+                description: The OAuth client this token belongs to.
+                type: dict
+      links:
+        description: Pagination links (if applicable).
+        type: dict
+        sample: {"self": "/api/v2/oauth-clients/oc-GhHqb5rkeK19mLB8/oauth-tokens"}
+      meta:
+        description: Pagination metadata.
+        type: dict
+        contains:
+          pagination:
+            description: Pagination information.
+            type: dict
+            sample: {"current-page": 1, "total-pages": 1, "total-count": 1}
 """
 
 from ansible.errors import AnsibleError
