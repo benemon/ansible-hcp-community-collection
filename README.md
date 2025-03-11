@@ -57,21 +57,27 @@ ansible-galaxy collection install -r requirements.yml
 
 The `benemon.hcp_community_collection` collection provides the following lookup plugins:
 
-| Plugin Name               | Description                                                   |
-|---------------------------|---------------------------------------------------------------|
-| `hvs_static_secret`       | Retrieve a static secret from an Application in HCP Vault Secrets. |
-| `hvs_dynamic_secret`      | Retrieve a dynamic secret from an Application in HCP Vault Secrets. |
-| `hvs_rotating_secret`     | Retrieve a rotating secret from an Application in HCP Vault Secrets. |
-| `hvs_secrets`             | Retrieve all secret metadata from an Application in HCP Vault Secrets. |
-| `hvs_apps`                | Retrieve Application metadata from Applications in HCP Vault Secrets. |
-| `packer_channel`          | Retrieve Channel metadata from HCP Packer. |
-| `packer_version`          | Retrieve Version metadata from HCP Packer. |
-| `packer_buckets`          | Retrieve metadata about buckets used for artifact storage in HCP Packer. |
-| `packer_channels`         | Retrieve a list of available channels in HCP Packer. |
-| `packer_versions`         | Retrieve a list of available Packer versions in HCP. |
-| `hcp_terraform_projects`  | Retrieve a list of projects in HCP Terraform or Terraform Enterprise. |
-| `hcp_terraform_oauth_tokens` | Retrieve OAuth tokens used for authentication with VCS providers in HCP Terraform or Terraform Enterprise. |
-| `hcp_terraform_variable_sets` | Retrieve a list of variable sets in HCP Terraform or Terraform Enterprise.
+| Plugin Name                       | Description                                                   |
+|-----------------------------------|---------------------------------------------------------------|
+| `hvs_static_secret`               | Retrieve a static secret from an Application in HCP Vault Secrets. |
+| `hvs_dynamic_secret`              | Retrieve a dynamic secret from an Application in HCP Vault Secrets. |
+| `hvs_rotating_secret`             | Retrieve a rotating secret from an Application in HCP Vault Secrets. |
+| `hvs_secrets`                     | Retrieve all secret metadata from an Application in HCP Vault Secrets. |
+| `hvs_apps`                        | Retrieve Application metadata from Applications in HCP Vault Secrets. |
+| `packer_channel`                  | Retrieve Channel metadata from HCP Packer. |
+| `packer_version`                  | Retrieve Version metadata from HCP Packer. |
+| `packer_buckets`                  | Retrieve metadata about buckets used for artifact storage in HCP Packer. |
+| `packer_channels`                 | Retrieve a list of available channels in HCP Packer. |
+| `packer_versions`                 | Retrieve a list of available Packer versions in HCP. |
+| `hcp_terraform_projects`          | Retrieve a list of projects in HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_oauth_clients`     | Retrieve OAuth clients used for VCS integration in HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_oauth_tokens`      | Retrieve OAuth tokens used for authentication with VCS providers in HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_variable_sets`     | Retrieve a list of variable sets in HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_agent_pools`       | Retrieve a list of agent pools from HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_agents`            | Retrieve a list of agents from HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_organizations`     | Retrieve a list of organizations from HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_state_version_outputs` | Retrieve state version outputs from HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_state_versions`    | Retrieve state versions from HCP Terraform or Terraform Enterprise. |
 
 
 Each plugin can be used in playbooks by invoking the `lookup` function, as demonstrated in the example below.
@@ -237,9 +243,13 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
 | Module Name                         | Description                                      |
 |--------------------------------------|--------------------------------------------------|
 | `hcp_terraform_run`                  | Triggers a Terraform run in HCP Terraform or Terraform Enterprise. |
-| `hcp_terraform_workspace`           | Create and manage workspaces in HCP Terraform or Terraform Enterprise.            |
-| `hcp_terraform_workspace_variable`  | Create and manage workspace variables in HCP Terraform or Terraform Enterprise.       |
-| `hcp_terraform_variable_set`        | Create and manage variable sets at organization, project, and workspace levels in HCP Terraform or Terraform Enterprise |
+| `hcp_terraform_workspace`           | Create and manage workspaces in HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_workspace_variable`  | Create and manage workspace variables in HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_variable_set`        | Create and manage variable sets at organization, project, and workspace levels in HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_agent_pool`         | Create and manage agent pools in HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_agent_token`        | Create and manage agent tokens in HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_organization`        | Create and manage organizations in HCP Terraform or Terraform Enterprise. |
+| `hcp_terraform_project`             | Create and manage projects in HCP Terraform or Terraform Enterprise. |
 
 ### Example Usage
 
@@ -293,23 +303,36 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
   connection: local
   gather_facts: false
   vars:
-    # Credentials will be read from environment variables
     organization: "my-organisation"
     project_name: "my-project"
     workspace_name: "aws-infra-ansible"
     repo_identifier: "my-repo/aws-infra"
-    working_directory: ""  # Root of the repository
-    oauth_client_id: "oc-someClientId67516v"  # Specific OAuth client ID
-    tfe_token: "mySuperSecretToken"
-    varset_name: "AWS Credentials"  # Name of the variable set to assign
+    working_directory: ""             # Root of the repository
+    tfe_token: "{{ lookup('env', 'TFE_TOKEN') }}"
+    varset_name: "AWS Credentials"     # The variable set name to search for
+    service_provider: "github"          # Service provider type (must match API value)
+    oauth_client_name: "GitHub.com"     # Display name of the OAuth client
 
   tasks:
+    - name: Get OAuth client for GitHub
+      set_fact:
+        oauth_clients: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_oauth_clients', 'organization=' ~ organization, 'service_provider=github', 'name=' ~ oauth_client_name, 'token=' ~ tfe_token) }}"
+      register: oauth_clients_result
+
+    - name: Extract OAuth client ID
+      set_fact:
+        oauth_client_id: "{{ oauth_clients.data[0].id }}"
+      when: oauth_clients.data | length > 0
+
+    - name: Display OAuth client ID
+      debug:
+        msg: "Using OAuth client ID: {{ oauth_client_id }}"
+      when: oauth_clients.data | length > 0
+
     - name: Get OAuth tokens for the specified client
       set_fact:
-        oauth_tokens: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_oauth_tokens', 
-                          'oauth_client_id=' ~ oauth_client_id,
-                          'token=' ~ tfe_token) }}"
-      register: oauth_result
+        oauth_tokens: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_oauth_tokens', 'oauth_client_id=' ~ oauth_client_id, 'token=' ~ tfe_token) }}"
+      register: oauth_tokens_result
 
     - name: Extract OAuth token ID
       set_fact:
@@ -320,18 +343,14 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
       debug:
         msg: "Using OAuth token ID: {{ oauth_token_id }}"
 
-    - name: Get project ID
+    - name: Get project ID with server-side filtering using q
       set_fact:
-        projects: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_projects', 
-                      'organization=' ~organization,
-                      'token=' ~ tfe_token) }}"
+        projects: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_projects', 'organization=' ~ organization, 'token=' ~ tfe_token, 'q=' ~ project_name) }}"
       register: projects_result
 
-    - name: Find AWS project
+    - name: Extract project ID
       set_fact:
-        project_id: "{{ projects.data | 
-                       selectattr('attributes.name', 'equalto', project_name) | 
-                       map(attribute='id') | first }}"
+        project_id: "{{ projects.data | map(attribute='id') | first }}"
       when: projects.data | length > 0
 
     - name: Display project ID
@@ -355,9 +374,6 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
           branch: "main"
       register: workspace_result
 
-    - name: Display workspace information
-      debug:
-        msg: "Workspace created with ID: {{ workspace_result.workspace.id }}"
 
     - name: Create workspace variable
       benemon.hcp_community_collection.hcp_terraform_workspace_variable:
@@ -374,13 +390,12 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
       debug:
         msg: "Variable created: {{ variable_result.variable.key }}"
 
-    # Find and assign variable set
-    - name: Find the AWS Credentials variable set
+    - name: Find the AWS Credentials variable set with server-side filtering using q
       set_fact:
         varsets: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_variable_sets', 
                     'organization=' ~ organization,
                     'token=' ~ tfe_token,
-                    'name=' ~ varset_name) }}"
+                    'q=' ~ varset_name) }}"
       register: varsets_result
 
     - name: Check if variable set was found
@@ -413,18 +428,98 @@ Each plugin can be used in playbooks by invoking the `lookup` function, as demon
         msg: "Variable set '{{ varset_name }}' successfully assigned to workspace"
       when: varsets.data | length > 0 and varset_update_result.changed
 
-    - name: Trigger a plan-only run
+    - name: Trigger a a plan and apply for the workspace
       benemon.hcp_community_collection.hcp_terraform_run:
         workspace_id: "{{ workspace_result.workspace.id }}"
         message: "Initial plan triggered by Ansible"
         token: "{{ tfe_token }}"
-        plan_only: true
+        auto_apply: true
         wait: true
       register: run_result
 
     - name: Display run status
       debug:
         msg: "Terraform plan completed with status: {{ run_result.status }}"
+    - name: Get the current state version for the workspace
+      set_fact:
+        state_version: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_state_versions', 
+                          'workspace_id=' ~ workspace_result.workspace.id,
+                          'token=' ~ tfe_token,
+                          'wait_for_processing=true',
+                          'wait_timeout=180') }}"
+      register: state_version_result
+      when: workspace_result is defined
+
+    - name: Display state version information
+      debug:
+        msg: 
+          - "State version ID: {{ state_version.data.id }}"
+          - "Created at: {{ state_version.data.attributes['created-at'] }}"
+          - "Terraform version: {{ state_version.data.attributes['terraform-version'] }}"
+          - "Resources processed: {{ state_version.data.attributes['resources-processed'] }}"
+      when: state_version_result is defined and state_version_result.skipped is not defined
+
+    - name: Get the state outputs for the workspace
+      set_fact:
+        state_outputs: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_state_version_outputs', 
+                          'workspace_id=' ~ workspace_result.workspace.id,
+                          'token=' ~ tfe_token,
+                          'wait_for_processing=true',
+                          'wait_timeout=180') }}"
+      register: state_outputs_result
+      when: workspace_result is defined
+
+    - name: Display all state outputs
+      debug:
+        var: state_outputs
+      when: state_outputs is defined
+
+    - name: Get instance_ami output
+      set_fact:
+        instance_ami: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_state_version_outputs', 
+                         'workspace_id=' ~ workspace_result.workspace.id,
+                         'token=' ~ tfe_token,
+                         'output_name=instance_ami') }}"
+      register: instance_ami_result
+      when: state_outputs is defined
+
+    - name: Get instance_arn output
+      set_fact:
+        instance_arn: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_state_version_outputs', 
+                         'workspace_id=' ~ workspace_result.workspace.id,
+                         'token=' ~ tfe_token,
+                         'output_name=instance_arn') }}"
+      register: instance_arn_result
+      when: state_outputs is defined
+
+    - name: Get instance_ip output
+      set_fact:
+        instance_ip: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_state_version_outputs', 
+                        'workspace_id=' ~ workspace_result.workspace.id,
+                        'token=' ~ tfe_token,
+                        'output_name=instance_ip') }}"
+      register: instance_ip_result
+      when: state_outputs is defined
+
+    - name: Get public_dns output
+      set_fact:
+        public_dns: "{{ lookup('benemon.hcp_community_collection.hcp_terraform_state_version_outputs', 
+                       'workspace_id=' ~ workspace_result.workspace.id,
+                       'token=' ~ tfe_token,
+                       'output_name=public_dns') }}"
+      register: public_dns_result
+      when: state_outputs is defined
+
+    - name: Display all instance details
+      debug:
+        msg: |
+          AWS EC2 Instance Details:
+          ------------------------
+          AMI: {{ instance_ami if instance_ami_result is defined else 'Not available' }}
+          ARN: {{ instance_arn if instance_arn_result is defined else 'Not available' }}
+          Public IP: {{ instance_ip if instance_ip_result is defined else 'Not available' }}
+          Public DNS: {{ public_dns if public_dns_result is defined else 'Not available' }}
+      when: state_outputs is defined
 
 ```
 
